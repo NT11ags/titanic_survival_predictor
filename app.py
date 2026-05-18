@@ -16,13 +16,17 @@ from sklearn.preprocessing import StandardScaler
 app = Flask(__name__)
 
 MODEL_PATHS = {
-    "lr":    "model_lr.pkl",    "rf":    "model_rf.pkl",
-    "lr_fe": "model_lr_fe.pkl", "rf_fe": "model_rf_fe.pkl",
+    "lr":          "model_lr.pkl",
+    "rf":          "model_rf.pkl",
+    "lr_fe":       "model_lr_fe.pkl",
+    "rf_fe":       "model_rf_fe.pkl",
+    "lr_tuned":    "model_lr_tuned.pkl",
+    "rf_tuned":    "model_rf_tuned.pkl",
+    "lr_fe_tuned": "model_lr_fe_tuned.pkl",
+    "rf_fe_tuned": "model_rf_fe_tuned.pkl",
 }
-METRICS_PATHS = {
-    "lr":    "metrics_lr.json",    "rf":    "metrics_rf.json",
-    "lr_fe": "metrics_lr_fe.json", "rf_fe": "metrics_rf_fe.json",
-}
+METRICS_PATHS = {k: v.replace("model_", "metrics_").replace(".pkl", ".json")
+                 for k, v in MODEL_PATHS.items()}
 
 _FALLBACK_DATA = {
     "Survived": [0,1,1,1,0,0,0,0,1,1,1,1,0,0,0,1,0,1,0,1,
@@ -91,8 +95,6 @@ def _load_data():
 
 def _load_data_fe():
     df = _fetch_df()
-
-    # Extract title from Name column if available, otherwise approximate from Sex/Age
     if "Name" in df.columns:
         df["Title"] = df["Name"].str.extract(r',\s*([^.]+)\.').iloc[:, 0].str.strip()
         df["Title"] = df["Title"].replace({"Mlle": "Miss", "Ms": "Miss", "Mme": "Mrs"})
@@ -105,14 +107,11 @@ def _load_data_fe():
                       else ("Miss" if r["Age"] <= 14 else "Mrs"),
             axis=1,
         )
-
     df["FamilySize"] = df["SibSp"] + df["Parch"] + 1
     df["AgeBin"]     = pd.cut(df["Age"], bins=[-1, 12, 17, 60, 100], labels=False)
-
     df["Sex"]      = df["Sex"].map({"male": 0, "female": 1})
     df["Embarked"] = df["Embarked"].map({"S": 0, "C": 1, "Q": 2}).fillna(0)
     df["Title"]    = df["Title"].map({"Mr": 0, "Mrs": 1, "Miss": 2, "Master": 3, "Rare": 4}).fillna(4)
-
     features = ["Pclass", "Sex", "AgeBin", "SibSp", "Parch", "Fare", "Embarked", "Title", "FamilySize"]
     df = df[features + ["Survived"]].dropna()
     X, y = df[features], df["Survived"]
@@ -122,20 +121,20 @@ def _load_data_fe():
 
 def _build_pipeline(model_type):
     if "rf" in model_type:
-        return Pipeline([("model", RandomForestClassifier(random_state=42))])
+        return Pipeline([("model", RandomForestClassifier(n_estimators=100, random_state=42))])
     return Pipeline([
         ("scaler", StandardScaler()),
-        ("model",  LogisticRegression(random_state=42)),
+        ("model",  LogisticRegression(max_iter=1000, random_state=42)),
     ])
 
 
 def _build_param_grid(model_type):
     if "rf" in model_type:
         return {
-            "model__n_estimators":     [50, 100, 200],
-            "model__max_depth":        [None, 10, 20],
-            "model__min_samples_split":[2, 5],
-            "model__min_samples_leaf": [1, 2],
+            "model__n_estimators":      [50, 100, 200],
+            "model__max_depth":         [None, 10, 20],
+            "model__min_samples_split": [2, 5],
+            "model__min_samples_leaf":  [1, 2],
         }
     return {
         "model__C":        [0.01, 0.1, 1, 10, 100],
@@ -153,16 +152,22 @@ def _compute_metrics(pipeline, X_test, y_test, features, model_type):
     cm         = confusion_matrix(y_test, y_pred)
     fpr, tpr, _ = roc_curve(y_test, y_proba)
     roc_auc    = auc(fpr, tpr)
-    fe_suffix  = " (Feature Engineered)" if "fe" in model_type else ""
 
-    if "rf" in model_type:
+    is_rf    = "rf"    in model_type
+    is_fe    = "fe"    in model_type
+    is_tuned = "tuned" in model_type
+
+    base_name    = "Random Forest"          if is_rf    else "Logistic Regression"
+    fe_suffix    = " (FE)"                  if is_fe    else ""
+    tuned_suffix = " + Tuned"               if is_tuned else ""
+    model_name   = base_name + fe_suffix + tuned_suffix
+
+    if is_rf:
         feature_values      = pipeline.named_steps["model"].feature_importances_.tolist()
         feature_chart_label = "Importance"
-        model_name          = "Random Forest" + fe_suffix
     else:
         feature_values      = pipeline.named_steps["model"].coef_[0].tolist()
         feature_chart_label = "Coefficient value"
-        model_name          = "Logistic Regression" + fe_suffix
 
     return {
         "model_name":          model_name,
@@ -182,36 +187,46 @@ def _compute_metrics(pipeline, X_test, y_test, features, model_type):
 
 
 def train_model(model_type, X_train, X_test, y_train, y_test, features):
-    grid_search = GridSearchCV(
-        _build_pipeline(model_type),
-        _build_param_grid(model_type),
-        cv=5, scoring="accuracy", n_jobs=-1,
-    )
-    grid_search.fit(X_train, y_train)
-    best = grid_search.best_estimator_
+    pipeline = _build_pipeline(model_type)
 
-    print(f"[{model_type.upper()}] Best params: {grid_search.best_params_}")
+    if "tuned" in model_type:
+        search = GridSearchCV(
+            pipeline, _build_param_grid(model_type),
+            cv=5, scoring="accuracy", n_jobs=-1,
+        )
+        search.fit(X_train, y_train)
+        best       = search.best_estimator_
+        best_params = search.best_params_
+        print(f"[{model_type.upper()}] Best params: {best_params}")
+    else:
+        pipeline.fit(X_train, y_train)
+        best       = pipeline
+        best_params = {}
+
     print(f"[{model_type.upper()}] Test accuracy: {best.score(X_test, y_test):.2%}")
 
     with open(MODEL_PATHS[model_type], "wb") as f:
         pickle.dump(best, f)
 
     metrics = _compute_metrics(best, X_test, y_test, features, model_type)
-    metrics["best_params"] = grid_search.best_params_
+    metrics["best_params"] = best_params
     with open(METRICS_PATHS[model_type], "w") as f:
         json.dump(metrics, f)
 
     return best, metrics
 
 
-# ── Startup: load or train all four models ────────────────────────────────────
+# ── Startup: load or train all eight models ───────────────────────────────────
+BASE_TYPES = ("lr", "rf", "lr_tuned", "rf_tuned")
+FE_TYPES   = ("lr_fe", "rf_fe", "lr_fe_tuned", "rf_fe_tuned")
+
 need_base = any(
     not (os.path.exists(MODEL_PATHS[t]) and os.path.exists(METRICS_PATHS[t]))
-    for t in ("lr", "rf")
+    for t in BASE_TYPES
 )
 need_fe = any(
     not (os.path.exists(MODEL_PATHS[t]) and os.path.exists(METRICS_PATHS[t]))
-    for t in ("lr_fe", "rf_fe")
+    for t in FE_TYPES
 )
 
 if need_base:
@@ -222,7 +237,7 @@ if need_fe:
 models      = {}
 all_metrics = {}
 
-for mtype in ("lr", "rf"):
+for mtype in BASE_TYPES:
     if os.path.exists(MODEL_PATHS[mtype]) and os.path.exists(METRICS_PATHS[mtype]):
         with open(MODEL_PATHS[mtype], "rb") as f:
             models[mtype] = pickle.load(f)
@@ -233,7 +248,7 @@ for mtype in ("lr", "rf"):
             mtype, _X_tr, _X_te, _y_tr, _y_te, _feats
         )
 
-for mtype in ("lr_fe", "rf_fe"):
+for mtype in FE_TYPES:
     if os.path.exists(MODEL_PATHS[mtype]) and os.path.exists(METRICS_PATHS[mtype]):
         with open(MODEL_PATHS[mtype], "rb") as f:
             models[mtype] = pickle.load(f)
@@ -250,21 +265,21 @@ for mtype in ("lr_fe", "rf_fe"):
 def index():
     return render_template("index.html")
 
-
 @app.route("/stats")
 def stats():
     return render_template("stats.html")
-
 
 @app.route("/fe-stats")
 def fe_stats():
     return render_template("fe_stats.html")
 
-
 @app.route("/compare")
 def compare():
     return render_template("compare_stats.html")
 
+@app.route("/tuning-stats")
+def tuning_stats():
+    return render_template("tuning_stats.html")
 
 @app.route("/metrics")
 def metrics():
@@ -273,11 +288,9 @@ def metrics():
         return jsonify({"error": "Unknown model"}), 400
     return jsonify(all_metrics[mtype])
 
-
 @app.route("/previous-models")
 def previous_models():
     return render_template("history.html")
-
 
 @app.route("/history-data")
 def history_data():
@@ -286,7 +299,6 @@ def history_data():
         with open(history_path, "r") as f:
             return jsonify(json.load(f))
     return jsonify([])
-
 
 @app.route("/save-model", methods=["POST"])
 def save_model():
@@ -315,13 +327,11 @@ def save_model():
     if os.path.exists(history_path):
         with open(history_path, "r") as f:
             history = json.load(f)
-
     history.append(entry)
     with open(history_path, "w") as f:
         json.dump(history, f, indent=2)
 
     return jsonify({"ok": True})
-
 
 @app.route("/predict", methods=["POST"])
 def predict():
@@ -342,11 +352,7 @@ def predict():
         if "fe" in mtype:
             age_bin     = 0 if age <= 12 else 1 if age <= 17 else 2 if age <= 60 else 3
             family_size = sibsp + parch + 1
-            # Approximate title from sex and age (no Name field in predictor)
-            if sex == 0:
-                title = 3 if age <= 14 else 0   # Master or Mr
-            else:
-                title = 2 if age <= 14 else 1   # Miss or Mrs
+            title = (3 if age <= 14 else 0) if sex == 0 else (2 if age <= 14 else 1)
             feat_arr = np.array([[pclass, sex, age_bin, sibsp, parch, fare, embarked, title, family_size]])
         else:
             feat_arr = np.array([[pclass, sex, age, sibsp, parch, fare, embarked]])
