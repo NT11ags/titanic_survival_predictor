@@ -24,6 +24,7 @@ MODEL_PATHS = {
     "rf_tuned":    "model_rf_tuned.pkl",
     "lr_fe_tuned":    "model_lr_fe_tuned.pkl",
     "rf_fe_tuned":    "model_rf_fe_tuned.pkl",
+    "ensemble_base":  "model_ensemble_base.pkl",
     "ensemble_fe":    "model_ensemble_fe.pkl",
     "ensemble_tuned": "model_ensemble_tuned.pkl",
 }
@@ -259,12 +260,12 @@ def train_ensemble(model_type, X_train, X_test, y_train, y_test, features, metri
 # ── Startup: load or train all ten models ─────────────────────────────────────
 BASE_TYPES = ("lr", "rf", "lr_tuned", "rf_tuned")
 FE_TYPES       = ("lr_fe", "rf_fe", "lr_fe_tuned", "rf_fe_tuned")
-ENSEMBLE_TYPES = ("ensemble_fe", "ensemble_tuned")
+ENSEMBLE_TYPES = ("ensemble_base", "ensemble_fe", "ensemble_tuned")
 
 def _missing(t):
     return not (os.path.exists(MODEL_PATHS[t]) and os.path.exists(METRICS_PATHS[t]))
 
-need_base = any(_missing(t) for t in BASE_TYPES + ("ensemble_tuned",))
+need_base = any(_missing(t) for t in BASE_TYPES + ("ensemble_base", "ensemble_tuned"))
 need_fe   = any(_missing(t) for t in FE_TYPES   + ("ensemble_fe",))
 
 if need_base:
