@@ -1,0 +1,13 @@
+[
+  {
+    "name": "Logistic Regressor",
+    "date": "18/05/2026",
+    "accuracy": 0.797,
+    "precision": 0.854,
+    "recall": 0.651,
+    "f1": 0.739,
+    "auc": 0.83,
+    "confusion_matrix": [[73, 7], [22, 41]],
+    "notes": "Sex is by far the strongest predictor — being female strongly increases survival likelihood. Pclass and Age are the next most influential, both negatively correlated. Fare, Parch, Embarked, and SibSp have minimal influence."
+  }
+]

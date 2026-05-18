@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Previous Models — Titanic Predictor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #0d0d0d; --paper: #f5f0e8; --rust: #8b3a2a;
+      --gold: #c9a84c; --navy: #1a2744; --fog: #c8c0b0; --cream: #ede8db;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      background-color: var(--navy);
+      color: var(--paper);
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 0 1rem 4rem;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse at 20% 80%, rgba(26,39,68,0.9) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%, rgba(10,20,45,0.8) 0%, transparent 60%),
+        linear-gradient(180deg, #0a1628 0%, #1a2744 40%, #0f1e38 100%);
+      z-index: -1;
+    }
+
+    header {
+      width: 100%; max-width: 860px;
+      text-align: center; padding: 3rem 1rem 2rem;
+    }
+    .nav {
+      display: flex; justify-content: center; gap: 2rem;
+      margin-bottom: 1rem;
+    }
+    .nav a {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.65rem; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--gold);
+      text-decoration: none; opacity: 0.6; transition: opacity 0.2s;
+    }
+    .nav a:hover { opacity: 1; }
+    .tagline {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.65rem; letter-spacing: 0.35em;
+      text-transform: uppercase; color: var(--gold);
+    }
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 300; letter-spacing: 0.04em;
+      margin: 0.5rem 0 0.3rem; color: var(--paper);
+    }
+    h1 em { font-style: italic; color: var(--gold); }
+    .subtitle { font-size: 1rem; font-weight: 300; color: var(--fog); font-style: italic; }
+
+    /* Model list */
+    .model-list {
+      width: 100%; max-width: 860px;
+      display: flex; flex-direction: column; gap: 1.5rem;
+    }
+
+    .model-card {
+      background: rgba(245,240,232,0.05);
+      border: 1px solid rgba(201,168,76,0.25);
+      border-radius: 2px;
+      padding: 2rem 2.5rem;
+      position: relative;
+    }
+    .model-card::after {
+      content: '✦';
+      position: absolute; top: -0.7rem; left: 50%;
+      transform: translateX(-50%);
+      color: var(--gold); font-size: 0.85rem;
+      background: var(--navy); padding: 0 0.5rem;
+    }
+
+    .model-header {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 1.5rem; flex-wrap: wrap; gap: 0.5rem;
+    }
+    .model-name {
+      font-size: 1.6rem; font-weight: 300; color: var(--paper);
+    }
+    .model-date {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.65rem; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--gold); opacity: 0.7;
+    }
+
+    .section-label {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.6rem; letter-spacing: 0.3em;
+      text-transform: uppercase; color: var(--gold);
+      margin-bottom: 1rem;
+      display: flex; align-items: center; gap: 1rem;
+    }
+    .section-label::after {
+      content: ''; flex: 1; height: 1px;
+      background: rgba(201,168,76,0.2);
+    }
+
+    /* Stat pills */
+    .stat-row {
+      display: flex; flex-wrap: wrap; gap: 0.8rem; margin-bottom: 1.8rem;
+    }
+    .stat-pill {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(201,168,76,0.2);
+      border-radius: 2px; padding: 0.6rem 1.1rem;
+      text-align: center;
+    }
+    .pill-label {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.55rem; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--fog);
+      display: block; margin-bottom: 0.25rem;
+    }
+    .pill-value {
+      font-size: 1.3rem; font-weight: 300; color: var(--gold);
+    }
+
+    /* Confusion matrix */
+    .bottom-row {
+      display: grid; grid-template-columns: auto 1fr;
+      gap: 2rem; align-items: start;
+    }
+    @media (max-width: 560px) { .bottom-row { grid-template-columns: 1fr; } }
+
+    .cm-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;
+    }
+    .cm-cell {
+      border-radius: 2px; padding: 0.9rem 0.8rem; text-align: center; min-width: 70px;
+    }
+    .cm-cell .cm-num { font-size: 1.5rem; font-weight: 300; display: block; }
+    .cm-cell .cm-lbl {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.5rem; letter-spacing: 0.1em;
+      text-transform: uppercase; color: rgba(255,255,255,0.55);
+    }
+    .cm-tp, .cm-tn { background: rgba(40,120,80,0.3); border: 1px solid rgba(100,200,150,0.25); }
+    .cm-fp, .cm-fn { background: rgba(120,40,30,0.3); border: 1px solid rgba(200,80,60,0.25); }
+
+    .notes {
+      font-size: 0.95rem; font-weight: 300; color: var(--fog);
+      font-style: italic; line-height: 1.6;
+    }
+
+    .empty {
+      text-align: center; color: var(--fog); font-style: italic;
+      padding: 3rem; font-size: 1.1rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <nav class="nav">
+      <a href="/">← Predictor</a>
+      <a href="/stats">Model Stats</a>
+    </nav>
+    <p class="tagline">RMS Titanic · Model Archive</p>
+    <h1><em>Previous</em> Models</h1>
+    <p class="subtitle">A record of every model trained on this dataset</p>
+  </header>
+
+  <div class="model-list" id="model-list">
+    <p class="empty">Loading…</p>
+  </div>
+
+  <script>
+    fetch('/history-data').then(r => r.json()).then(models => {
+      const list = document.getElementById('model-list');
+      if (!models.length) {
+        list.innerHTML = '<p class="empty">No models recorded yet.</p>';
+        return;
+      }
+
+      list.innerHTML = [...models].reverse().map(m => {
+        const [[tn, fp], [fn, tp]] = m.confusion_matrix;
+        return `
+          <div class="model-card">
+            <div class="model-header">
+              <span class="model-name">${m.name}</span>
+              <span class="model-date">${m.date}</span>
+            </div>
+
+            <div class="section-label">Metrics</div>
+            <div class="stat-row">
+              <div class="stat-pill"><span class="pill-label">Accuracy</span><span class="pill-value">${pct(m.accuracy)}</span></div>
+              <div class="stat-pill"><span class="pill-label">Precision</span><span class="pill-value">${pct(m.precision)}</span></div>
+              <div class="stat-pill"><span class="pill-label">Recall</span><span class="pill-value">${pct(m.recall)}</span></div>
+              <div class="stat-pill"><span class="pill-label">F1 Score</span><span class="pill-value">${pct(m.f1)}</span></div>
+              <div class="stat-pill"><span class="pill-label">AUC</span><span class="pill-value">${m.auc.toFixed(2)}</span></div>
+            </div>
+
+            <div class="bottom-row">
+              <div>
+                <div class="section-label">Confusion Matrix</div>
+                <div class="cm-grid">
+                  <div class="cm-cell cm-tp"><span class="cm-num">${tp}</span><span class="cm-lbl">True Pos</span></div>
+                  <div class="cm-cell cm-fp"><span class="cm-num">${fp}</span><span class="cm-lbl">False Pos</span></div>
+                  <div class="cm-cell cm-fn"><span class="cm-num">${fn}</span><span class="cm-lbl">False Neg</span></div>
+                  <div class="cm-cell cm-tn"><span class="cm-num">${tn}</span><span class="cm-lbl">True Neg</span></div>
+                </div>
+              </div>
+              <div>
+                <div class="section-label">Notes</div>
+                <p class="notes">${m.notes}</p>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    });
+
+    function pct(v) { return (v * 100).toFixed(1) + '%'; }
+  </script>
+</body>
+</html>

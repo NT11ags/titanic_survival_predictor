@@ -1,4 +1,4 @@
-import io
+import json
 import os
 import pickle
 
@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 from flask import Flask, jsonify, render_template, request
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (auc, confusion_matrix, f1_score,
+                             precision_score, recall_score, roc_curve)
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -13,15 +15,14 @@ from sklearn.preprocessing import StandardScaler
 app = Flask(__name__)
 
 MODEL_PATH = "model.pkl"
+METRICS_PATH = "metrics.json"
 
 
 def train_model():
-    """Train logistic regression on the Titanic dataset."""
     url = "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv"
     try:
         df = pd.read_csv(url)
     except Exception:
-        # Fallback: embedded minimal dataset for offline use
         data = {
             "Survived": [0,1,1,1,0,0,0,0,1,1,1,1,0,0,0,1,0,1,0,1,
                          0,1,1,1,0,1,0,0,1,0,0,1,1,0,0,0,1,0,0,1,
@@ -90,15 +91,39 @@ def train_model():
     with open(MODEL_PATH, "wb") as f:
         pickle.dump(pipeline, f)
 
-    return pipeline
+    y_pred = pipeline.predict(X_test)
+    y_proba = pipeline.predict_proba(X_test)[:, 1]
+    cm = confusion_matrix(y_test, y_pred)
+    fpr, tpr, _ = roc_curve(y_test, y_proba)
+    roc_auc = auc(fpr, tpr)
+    coefficients = pipeline.named_steps["model"].coef_[0].tolist()
+
+    metrics = {
+        "accuracy":         round(float(accuracy), 4),
+        "precision":        round(float(precision_score(y_test, y_pred, zero_division=0)), 4),
+        "recall":           round(float(recall_score(y_test, y_pred, zero_division=0)), 4),
+        "f1":               round(float(f1_score(y_test, y_pred, zero_division=0)), 4),
+        "confusion_matrix": cm.tolist(),
+        "fpr":              [round(x, 4) for x in fpr.tolist()],
+        "tpr":              [round(x, 4) for x in tpr.tolist()],
+        "roc_auc":          round(float(roc_auc), 4),
+        "feature_names":    features,
+        "coefficients":     [round(x, 4) for x in coefficients],
+    }
+
+    with open(METRICS_PATH, "w") as f:
+        json.dump(metrics, f)
+
+    return pipeline, metrics
 
 
-# Train or load model at startup
-if os.path.exists(MODEL_PATH):
+if os.path.exists(MODEL_PATH) and os.path.exists(METRICS_PATH):
     with open(MODEL_PATH, "rb") as f:
         model = pickle.load(f)
+    with open(METRICS_PATH, "r") as f:
+        model_metrics = json.load(f)
 else:
-    model = train_model()
+    model, model_metrics = train_model()
 
 
 @app.route("/")
@@ -106,30 +131,82 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/stats")
+def stats():
+    return render_template("stats.html")
+
+
+@app.route("/metrics")
+def metrics():
+    return jsonify(model_metrics)
+
+
+@app.route("/previous-models")
+def previous_models():
+    return render_template("history.html")
+
+
+@app.route("/history-data")
+def history_data():
+    history_path = "model_history.json"
+    if os.path.exists(history_path):
+        with open(history_path, "r") as f:
+            return jsonify(json.load(f))
+    return jsonify([])
+
+
+@app.route("/save-model", methods=["POST"])
+def save_model():
+    from datetime import date
+    data = request.get_json()
+    name = (data.get("name") or "Logistic Regressor").strip()
+
+    entry = {
+        "name":             name,
+        "date":             date.today().strftime("%d/%m/%Y"),
+        "accuracy":         model_metrics["accuracy"],
+        "precision":        model_metrics["precision"],
+        "recall":           model_metrics["recall"],
+        "f1":               model_metrics["f1"],
+        "auc":              model_metrics["roc_auc"],
+        "confusion_matrix": model_metrics["confusion_matrix"],
+        "notes":            "",
+    }
+
+    history_path = "model_history.json"
+    history = []
+    if os.path.exists(history_path):
+        with open(history_path, "r") as f:
+            history = json.load(f)
+
+    history.append(entry)
+    with open(history_path, "w") as f:
+        json.dump(history, f, indent=2)
+
+    return jsonify({"ok": True})
+
+
 @app.route("/predict", methods=["POST"])
 def predict():
     data = request.get_json()
 
     try:
-        pclass = int(data["pclass"])
-        sex = 0 if data["sex"] == "male" else 1
-        age = float(data["age"])
-        sibsp = int(data["sibsp"])
-        parch = int(data["parch"])
-        fare = float(data["fare"])
+        pclass   = int(data["pclass"])
+        sex      = 0 if data["sex"] == "male" else 1
+        age      = float(data["age"])
+        sibsp    = int(data["sibsp"])
+        parch    = int(data["parch"])
+        fare     = float(data["fare"])
         embarked = {"S": 0, "C": 1, "Q": 2}.get(data["embarked"], 0)
 
-        features = np.array([[pclass, sex, age, sibsp, parch, fare, embarked]])
+        features   = np.array([[pclass, sex, age, sibsp, parch, fare, embarked]])
         prediction = model.predict(features)[0]
         probability = model.predict_proba(features)[0]
 
-        survived_prob = float(probability[1])
-        died_prob = float(probability[0])
-
         return jsonify({
-            "survived": bool(prediction),
-            "survived_probability": round(survived_prob * 100, 1),
-            "died_probability": round(died_prob * 100, 1),
+            "survived":             bool(prediction),
+            "survived_probability": round(float(probability[1]) * 100, 1),
+            "died_probability":     round(float(probability[0]) * 100, 1),
         })
     except (KeyError, ValueError, TypeError) as e:
         return jsonify({"error": str(e)}), 400

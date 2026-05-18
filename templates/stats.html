@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Model Performance — Titanic Predictor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    :root {
+      --ink: #0d0d0d; --paper: #f5f0e8; --rust: #8b3a2a;
+      --gold: #c9a84c; --navy: #1a2744; --fog: #c8c0b0; --cream: #ede8db;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      background-color: var(--navy);
+      color: var(--paper);
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 0 1rem 4rem;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse at 20% 80%, rgba(26,39,68,0.9) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%, rgba(10,20,45,0.8) 0%, transparent 60%),
+        linear-gradient(180deg, #0a1628 0%, #1a2744 40%, #0f1e38 100%);
+      z-index: -1;
+    }
+
+    header {
+      width: 100%; max-width: 900px;
+      text-align: center; padding: 3rem 1rem 2rem;
+    }
+    .tagline {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.65rem; letter-spacing: 0.35em;
+      text-transform: uppercase; color: var(--gold);
+    }
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 300; letter-spacing: 0.04em;
+      margin: 0.5rem 0 0.3rem; color: var(--paper);
+    }
+    h1 em { font-style: italic; color: var(--gold); }
+    .subtitle { font-size: 1rem; font-weight: 300; color: var(--fog); font-style: italic; }
+
+    .back-link {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.65rem; letter-spacing: 0.2em;
+      text-transform: uppercase; color: var(--gold);
+      text-decoration: none; opacity: 0.7;
+      transition: opacity 0.2s;
+      display: inline-block; margin-bottom: 1rem;
+    }
+    .back-link:hover { opacity: 1; }
+
+    /* Stat cards */
+    .stat-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 1rem; width: 100%; max-width: 900px; margin-bottom: 1.5rem;
+    }
+    @media (max-width: 600px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+    .stat-card {
+      background: rgba(245,240,232,0.05);
+      border: 1px solid rgba(201,168,76,0.25);
+      border-radius: 2px; padding: 1.4rem 1rem;
+      text-align: center;
+    }
+    .stat-label {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.58rem; letter-spacing: 0.25em;
+      text-transform: uppercase; color: var(--fog);
+      margin-bottom: 0.5rem;
+    }
+    .stat-value {
+      font-size: 2rem; font-weight: 300; color: var(--gold);
+    }
+
+    /* Chart cards */
+    .chart-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 1.5rem; width: 100%; max-width: 900px;
+    }
+    @media (max-width: 640px) { .chart-grid { grid-template-columns: 1fr; } }
+
+    .chart-card {
+      background: rgba(245,240,232,0.05);
+      border: 1px solid rgba(201,168,76,0.25);
+      border-radius: 2px; padding: 1.8rem 1.5rem;
+    }
+    .chart-title {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.6rem; letter-spacing: 0.3em;
+      text-transform: uppercase; color: var(--gold);
+      margin-bottom: 1.2rem;
+      display: flex; align-items: center; gap: 1rem;
+    }
+    .chart-title::after {
+      content: ''; flex: 1; height: 1px;
+      background: rgba(201,168,76,0.2);
+    }
+
+    /* Confusion matrix */
+    .cm-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 0.5rem; margin-top: 0.5rem;
+    }
+    .cm-cell {
+      border-radius: 2px; padding: 1.2rem 0.5rem;
+      text-align: center;
+    }
+    .cm-cell .cm-num {
+      font-size: 2rem; font-weight: 300; display: block;
+    }
+    .cm-cell .cm-lbl {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.55rem; letter-spacing: 0.15em;
+      text-transform: uppercase; color: rgba(255,255,255,0.6);
+    }
+    .cm-tp { background: rgba(40,120,80,0.35); border: 1px solid rgba(100,200,150,0.3); }
+    .cm-tn { background: rgba(40,120,80,0.35); border: 1px solid rgba(100,200,150,0.3); }
+    .cm-fp { background: rgba(120,40,30,0.35); border: 1px solid rgba(200,80,60,0.3); }
+    .cm-fn { background: rgba(120,40,30,0.35); border: 1px solid rgba(200,80,60,0.3); }
+
+    canvas { max-height: 220px; }
+
+    /* Save bar */
+    .save-bar {
+      width: 100%; max-width: 900px;
+      display: flex; gap: 0.8rem; align-items: center;
+      margin-bottom: 1.5rem; flex-wrap: wrap;
+    }
+    .save-bar input[type="text"] {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-size: 1rem;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(201,168,76,0.2);
+      border-radius: 1px; color: var(--paper);
+      padding: 0.6rem 0.9rem; flex: 1; min-width: 180px;
+      outline: none; transition: border-color 0.2s;
+    }
+    .save-bar input[type="text"]:focus { border-color: var(--gold); }
+    .save-bar input[type="text"]::placeholder { color: var(--fog); opacity: 0.6; }
+    .btn-save {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.7rem; letter-spacing: 0.25em;
+      text-transform: uppercase;
+      background: transparent; border: 1px solid var(--gold);
+      color: var(--gold); cursor: pointer; border-radius: 1px;
+      padding: 0.65rem 1.4rem; white-space: nowrap;
+      transition: background 0.2s, color 0.2s;
+    }
+    .btn-save:hover:not(:disabled) { background: var(--gold); color: var(--navy); }
+    .btn-save:disabled { opacity: 0.5; cursor: default; }
+    .save-msg {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.65rem; letter-spacing: 0.15em;
+      text-transform: uppercase; padding: 0.65rem 0;
+    }
+    .save-msg.ok  { color: #7ecfa0; }
+    .save-msg.err { color: #e07060; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <nav style="display:flex;justify-content:center;gap:2rem;margin-bottom:1rem;">
+      <a class="back-link" href="/">← Predictor</a>
+      <a class="back-link" href="/previous-models">Previous Models</a>
+    </nav>
+    <p class="tagline">RMS Titanic · Model Analysis</p>
+    <h1><em>Model</em> Performance</h1>
+    <p class="subtitle">Logistic regression evaluated on held-out test data</p>
+  </header>
+
+  <div class="save-bar">
+    <input type="text" id="model-name" placeholder="Model name" value="Logistic Regressor" />
+    <button class="btn-save" id="btn-save" onclick="saveModel()">Save to Previous Models</button>
+    <span class="save-msg" id="save-msg"></span>
+  </div>
+
+  <div class="stat-grid" id="stat-grid">
+    <div class="stat-card"><div class="stat-label">Accuracy</div><div class="stat-value" id="s-acc">—</div></div>
+    <div class="stat-card"><div class="stat-label">Precision</div><div class="stat-value" id="s-pre">—</div></div>
+    <div class="stat-card"><div class="stat-label">Recall</div><div class="stat-value" id="s-rec">—</div></div>
+    <div class="stat-card"><div class="stat-label">F1 Score</div><div class="stat-value" id="s-f1">—</div></div>
+  </div>
+
+  <div class="chart-grid">
+
+    <div class="chart-card">
+      <div class="chart-title">Confusion Matrix</div>
+      <div class="cm-grid" id="cm-grid">
+        <div class="cm-cell cm-tp"><span class="cm-num" id="cm-tp">—</span><span class="cm-lbl">True Positive</span></div>
+        <div class="cm-cell cm-fp"><span class="cm-num" id="cm-fp">—</span><span class="cm-lbl">False Positive</span></div>
+        <div class="cm-cell cm-fn"><span class="cm-num" id="cm-fn">—</span><span class="cm-lbl">False Negative</span></div>
+        <div class="cm-cell cm-tn"><span class="cm-num" id="cm-tn">—</span><span class="cm-lbl">True Negative</span></div>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-title">ROC Curve</div>
+      <canvas id="roc-chart"></canvas>
+    </div>
+
+    <div class="chart-card" style="grid-column: 1 / -1;">
+      <div class="chart-title">Feature Importance (Coefficients)</div>
+      <canvas id="coef-chart"></canvas>
+    </div>
+
+  </div>
+
+  <script>
+    const GOLD = '#c9a84c';
+    const FOG  = '#c8c0b0';
+
+    Chart.defaults.color = FOG;
+    Chart.defaults.borderColor = 'rgba(201,168,76,0.1)';
+
+    fetch('/metrics').then(r => r.json()).then(m => {
+      // Stat cards
+      document.getElementById('s-acc').textContent = pct(m.accuracy);
+      document.getElementById('s-pre').textContent = pct(m.precision);
+      document.getElementById('s-rec').textContent = pct(m.recall);
+      document.getElementById('s-f1').textContent  = pct(m.f1);
+
+      // Confusion matrix: [[TN, FP], [FN, TP]]
+      const [[tn, fp], [fn, tp]] = m.confusion_matrix;
+      document.getElementById('cm-tp').textContent = tp;
+      document.getElementById('cm-fp').textContent = fp;
+      document.getElementById('cm-fn').textContent = fn;
+      document.getElementById('cm-tn').textContent = tn;
+
+      // ROC curve
+      new Chart(document.getElementById('roc-chart'), {
+        type: 'line',
+        data: {
+          datasets: [
+            {
+              label: `AUC = ${m.roc_auc}`,
+              data: m.fpr.map((x, i) => ({ x, y: m.tpr[i] })),
+              borderColor: GOLD,
+              borderWidth: 2,
+              pointRadius: 0,
+              fill: false,
+            },
+            {
+              label: 'Random',
+              data: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+              borderColor: 'rgba(255,255,255,0.2)',
+              borderWidth: 1,
+              borderDash: [4, 4],
+              pointRadius: 0,
+              fill: false,
+            },
+          ],
+        },
+        options: {
+          parsing: false,
+          scales: {
+            x: { title: { display: true, text: 'False Positive Rate' }, min: 0, max: 1 },
+            y: { title: { display: true, text: 'True Positive Rate'  }, min: 0, max: 1 },
+          },
+          plugins: { legend: { labels: { boxWidth: 12 } } },
+        },
+      });
+
+      // Feature coefficients
+      const pairs = m.feature_names.map((n, i) => ({ n, v: m.coefficients[i] }))
+                                   .sort((a, b) => a.v - b.v);
+      new Chart(document.getElementById('coef-chart'), {
+        type: 'bar',
+        data: {
+          labels: pairs.map(p => p.n),
+          datasets: [{
+            label: 'Coefficient',
+            data: pairs.map(p => p.v),
+            backgroundColor: pairs.map(p => p.v >= 0 ? 'rgba(100,200,150,0.5)' : 'rgba(200,80,60,0.5)'),
+            borderColor:     pairs.map(p => p.v >= 0 ? 'rgba(100,200,150,0.8)' : 'rgba(200,80,60,0.8)'),
+            borderWidth: 1,
+          }],
+        },
+        options: {
+          indexAxis: 'y',
+          plugins: { legend: { display: false } },
+          scales: { x: { title: { display: true, text: 'Coefficient value' } } },
+        },
+      });
+    });
+
+    function pct(v) { return (v * 100).toFixed(1) + '%'; }
+
+    async function saveModel() {
+      const btn = document.getElementById('btn-save');
+      const msg = document.getElementById('save-msg');
+      const name = document.getElementById('model-name').value.trim() || 'Logistic Regressor';
+
+      btn.disabled = true;
+      msg.textContent = '';
+
+      try {
+        const resp = await fetch('/save-model', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Server error');
+        msg.textContent = 'Saved.';
+        msg.className = 'save-msg ok';
+      } catch (err) {
+        msg.textContent = err.message;
+        msg.className = 'save-msg err';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
