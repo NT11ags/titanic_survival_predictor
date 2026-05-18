@@ -431,17 +431,13 @@
     <div class="form-grid">
 
       <div class="field full">
-        <label>Prediction Model</label>
-        <div class="radio-group">
-          <label>
-            <input type="radio" name="model" value="lr" checked />
-            <span>Logistic Regression</span>
-          </label>
-          <label>
-            <input type="radio" name="model" value="rf" />
-            <span>Random Forest</span>
-          </label>
-        </div>
+        <label for="model-select">Prediction Model</label>
+        <select id="model-select">
+          <option value="lr">Logistic Regression</option>
+          <option value="rf">Random Forest</option>
+          <option value="lr_fe">Logistic Regression (Feature Engineered)</option>
+          <option value="rf_fe">Random Forest (Feature Engineered)</option>
+        </select>
       </div>
 
       <div class="field">
@@ -507,29 +503,11 @@
 
   <div class="ship-deco">🚢 · · · · · · · · · · · ·</div>
 
-  <div style="display:flex;gap:2rem;margin-top:1.5rem;">
-    <a id="stats-link" href="/stats?model=lr" style="
-      font-family:'Courier Prime',monospace; font-size:0.65rem;
-      letter-spacing:0.25em; text-transform:uppercase;
-      color:var(--gold); text-decoration:none; opacity:0.6; transition:opacity 0.2s;
-    " onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">
-      Model Stats →
-    </a>
-    <a href="/previous-models" style="
-      font-family:'Courier Prime',monospace; font-size:0.65rem;
-      letter-spacing:0.25em; text-transform:uppercase;
-      color:var(--gold); text-decoration:none; opacity:0.6; transition:opacity 0.2s;
-    " onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">
-      Previous Models →
-    </a>
+  <div style="display:flex;gap:2rem;margin-top:1.5rem;flex-wrap:wrap;justify-content:center;">
+    <a href="/stats" style="font-family:'Courier Prime',monospace;font-size:0.65rem;letter-spacing:0.25em;text-transform:uppercase;color:var(--gold);text-decoration:none;opacity:0.6;transition:opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">Model Stats →</a>
+    <a href="/fe-stats" style="font-family:'Courier Prime',monospace;font-size:0.65rem;letter-spacing:0.25em;text-transform:uppercase;color:var(--gold);text-decoration:none;opacity:0.6;transition:opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">FE Stats →</a>
+    <a href="/previous-models" style="font-family:'Courier Prime',monospace;font-size:0.65rem;letter-spacing:0.25em;text-transform:uppercase;color:var(--gold);text-decoration:none;opacity:0.6;transition:opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">Previous Models →</a>
   </div>
-  <script>
-    document.querySelectorAll('input[name="model"]').forEach(r =>
-      r.addEventListener('change', () => {
-        document.getElementById('stats-link').href = '/stats?model=' + r.value;
-      })
-    );
-  </script>
 
   <script>
     async function predict() {
@@ -542,7 +520,7 @@
       btn.disabled = true;
 
       const payload = {
-        model:    document.querySelector('input[name="model"]:checked').value,
+        model:    document.getElementById('model-select').value,
         pclass:   document.getElementById('pclass').value,
         sex:      document.querySelector('input[name="sex"]:checked').value,
         age:      document.getElementById('age').value,

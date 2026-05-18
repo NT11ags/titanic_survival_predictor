@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Model Comparison — Titanic Predictor</title>
+  <title>Feature Engineered Models — Titanic Predictor</title>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <style>
@@ -51,7 +51,6 @@
     h1 em { font-style: italic; color: var(--gold); }
     .subtitle { font-size: 1rem; font-weight: 300; color: var(--fog); font-style: italic; }
 
-    /* Model colour legend */
     .legend {
       display: flex; justify-content: center; gap: 2rem; margin-top: 1.2rem;
     }
@@ -62,7 +61,6 @@
     }
     .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
 
-    /* Shared layout */
     .section { width: 100%; max-width: 960px; margin-bottom: 1.5rem; }
 
     .chart-card {
@@ -78,20 +76,30 @@
     }
     .chart-title::after { content: ''; flex: 1; height: 1px; background: rgba(201,168,76,0.2); }
 
-    .two-col {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;
-    }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
     @media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
 
+    /* Feature engineering summary */
+    .fe-pills {
+      display: flex; flex-wrap: wrap; gap: 0.8rem;
+    }
+    .fe-pill {
+      border: 1px solid rgba(201,168,76,0.3);
+      border-radius: 2px; padding: 0.7rem 1.1rem;
+    }
+    .fe-pill-title {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.58rem; letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--gold); margin-bottom: 0.3rem;
+    }
+    .fe-pill-body { font-size: 0.9rem; color: var(--fog); font-style: italic; }
+
+    /* Metrics chart */
     #metrics-chart { max-height: 280px; }
 
     /* Confusion matrices */
-    .cm-grid {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;
-    }
-    .cm-cell {
-      border-radius: 2px; padding: 1rem 0.5rem; text-align: center;
-    }
+    .cm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    .cm-cell { border-radius: 2px; padding: 1rem 0.5rem; text-align: center; }
     .cm-cell .cm-num { font-size: 1.8rem; font-weight: 300; display: block; }
     .cm-cell .cm-lbl {
       font-family: 'Courier Prime', monospace; font-size: 0.5rem;
@@ -100,7 +108,7 @@
     .cm-tp, .cm-tn { background: rgba(40,120,80,0.3); border: 1px solid rgba(100,200,150,0.25); }
     .cm-fp, .cm-fn { background: rgba(120,40,30,0.3); border: 1px solid rgba(200,80,60,0.25); }
 
-    /* Save bar (inline, inside card) */
+    /* Save bar */
     .save-bar {
       display: flex; gap: 0.6rem; align-items: center;
       margin-top: 1.2rem; flex-wrap: wrap;
@@ -137,23 +145,42 @@
   <header>
     <nav style="display:flex;justify-content:center;gap:2rem;">
       <a class="back-link" href="/">← Predictor</a>
-      <a class="back-link" href="/fe-stats">FE Models</a>
+      <a class="back-link" href="/stats">Base Models</a>
       <a class="back-link" href="/previous-models">Previous Models</a>
     </nav>
-    <p class="tagline">RMS Titanic · Model Comparison</p>
-    <h1><em>Side-by-Side</em> Analysis</h1>
-    <p class="subtitle">Both models evaluated on the same held-out test data</p>
+    <p class="tagline">RMS Titanic · Feature Engineering</p>
+    <h1><em>Engineered</em> Model Comparison</h1>
+    <p class="subtitle">LR and Random Forest trained with additional derived features</p>
     <div class="legend">
       <div class="legend-item">
         <div class="legend-dot" style="background:var(--gold)"></div>
-        Logistic Regression
+        LR (Feature Engineered)
       </div>
       <div class="legend-item">
         <div class="legend-dot" style="background:var(--steel)"></div>
-        Random Forest
+        RF (Feature Engineered)
       </div>
     </div>
   </header>
+
+  <!-- Feature engineering summary -->
+  <div class="section chart-card">
+    <div class="chart-title">Features Added</div>
+    <div class="fe-pills">
+      <div class="fe-pill">
+        <div class="fe-pill-title">Title</div>
+        <div class="fe-pill-body">Extracted from passenger name — Mr, Mrs, Miss, Master, Rare</div>
+      </div>
+      <div class="fe-pill">
+        <div class="fe-pill-title">Family Size</div>
+        <div class="fe-pill-body">SibSp + Parch + 1 — total number of family members aboard</div>
+      </div>
+      <div class="fe-pill">
+        <div class="fe-pill-title">Age Bin</div>
+        <div class="fe-pill-body">Age grouped into Child (0–12), Teen (13–17), Adult (18–60), Senior (60+)</div>
+      </div>
+    </div>
+  </div>
 
   <!-- Metrics comparison -->
   <div class="section chart-card">
@@ -170,7 +197,7 @@
   <!-- Confusion matrices -->
   <div class="section two-col">
     <div class="chart-card">
-      <div class="chart-title" style="color:var(--gold)">Confusion Matrix — LR</div>
+      <div class="chart-title" style="color:var(--gold)">Confusion Matrix — LR (FE)</div>
       <div class="cm-grid">
         <div class="cm-cell cm-tp"><span class="cm-num" id="lr-tp">—</span><span class="cm-lbl">True Pos</span></div>
         <div class="cm-cell cm-fp"><span class="cm-num" id="lr-fp">—</span><span class="cm-lbl">False Pos</span></div>
@@ -179,12 +206,12 @@
       </div>
       <div class="save-bar">
         <input type="text" id="lr-save-name" />
-        <button class="btn-save" onclick="saveModel('lr')">Save</button>
+        <button class="btn-save" onclick="saveModel('lr_fe')">Save</button>
         <span class="save-msg" id="lr-save-msg"></span>
       </div>
     </div>
     <div class="chart-card">
-      <div class="chart-title" style="color:var(--steel)">Confusion Matrix — RF</div>
+      <div class="chart-title" style="color:var(--steel)">Confusion Matrix — RF (FE)</div>
       <div class="cm-grid">
         <div class="cm-cell cm-tp"><span class="cm-num" id="rf-tp">—</span><span class="cm-lbl">True Pos</span></div>
         <div class="cm-cell cm-fp"><span class="cm-num" id="rf-fp">—</span><span class="cm-lbl">False Pos</span></div>
@@ -193,7 +220,7 @@
       </div>
       <div class="save-bar">
         <input type="text" id="rf-save-name" />
-        <button class="btn-save" onclick="saveModel('rf')">Save</button>
+        <button class="btn-save" onclick="saveModel('rf_fe')">Save</button>
         <span class="save-msg" id="rf-save-msg"></span>
       </div>
     </div>
@@ -202,11 +229,11 @@
   <!-- Feature charts -->
   <div class="section two-col">
     <div class="chart-card">
-      <div class="chart-title" style="color:var(--gold)">LR — Coefficients</div>
+      <div class="chart-title" style="color:var(--gold)">LR (FE) — Coefficients</div>
       <canvas id="lr-coef-chart"></canvas>
     </div>
     <div class="chart-card">
-      <div class="chart-title" style="color:var(--steel)">RF — Feature Importance</div>
+      <div class="chart-title" style="color:var(--steel)">RF (FE) — Feature Importance</div>
       <canvas id="rf-coef-chart"></canvas>
     </div>
   </div>
@@ -222,8 +249,8 @@
     function pct(v) { return (v * 100).toFixed(1) + '%'; }
 
     Promise.all([
-      fetch('/metrics?model=lr').then(r => r.json()),
-      fetch('/metrics?model=rf').then(r => r.json()),
+      fetch('/metrics?model=lr_fe').then(r => r.json()),
+      fetch('/metrics?model=rf_fe').then(r => r.json()),
     ]).then(([lr, rf]) => {
 
       // ── Metrics chart ──────────────────────────────────────────
@@ -233,18 +260,14 @@
           labels: ['Accuracy', 'Precision', 'Recall', 'F1 Score', 'AUC'],
           datasets: [
             {
-              label: 'Logistic Regression',
+              label: 'LR (Feature Engineered)',
               data: [lr.accuracy, lr.precision, lr.recall, lr.f1, lr.roc_auc].map(v => +(v * 100).toFixed(1)),
-              backgroundColor: 'rgba(201,168,76,0.5)',
-              borderColor: GOLD,
-              borderWidth: 1,
+              backgroundColor: 'rgba(201,168,76,0.5)', borderColor: GOLD, borderWidth: 1,
             },
             {
-              label: 'Random Forest',
+              label: 'RF (Feature Engineered)',
               data: [rf.accuracy, rf.precision, rf.recall, rf.f1, rf.roc_auc].map(v => +(v * 100).toFixed(1)),
-              backgroundColor: 'rgba(106,176,200,0.5)',
-              borderColor: STEEL,
-              borderWidth: 1,
+              backgroundColor: 'rgba(106,176,200,0.5)', borderColor: STEEL, borderWidth: 1,
             },
           ],
         },
@@ -264,10 +287,8 @@
       });
 
       // ── Save name inputs ───────────────────────────────────────
-      document.getElementById('lr-save-name').value =
-        lr.model_name + ' — ' + (lr.trained_at || '');
-      document.getElementById('rf-save-name').value =
-        rf.model_name + ' — ' + (rf.trained_at || '');
+      document.getElementById('lr-save-name').value = lr.model_name + ' — ' + (lr.trained_at || '');
+      document.getElementById('rf-save-name').value = rf.model_name + ' — ' + (rf.trained_at || '');
 
       // ── Confusion matrices ─────────────────────────────────────
       [[lr, 'lr'], [rf, 'rf']].forEach(([m, p]) => {
@@ -284,12 +305,12 @@
         data: {
           datasets: [
             {
-              label: `Logistic Regression (AUC ${lr.roc_auc})`,
+              label: `LR FE (AUC ${lr.roc_auc})`,
               data: lr.fpr.map((x, i) => ({ x, y: lr.tpr[i] })),
               borderColor: GOLD, borderWidth: 2, pointRadius: 0, fill: false,
             },
             {
-              label: `Random Forest (AUC ${rf.roc_auc})`,
+              label: `RF FE (AUC ${rf.roc_auc})`,
               data: rf.fpr.map((x, i) => ({ x, y: rf.tpr[i] })),
               borderColor: STEEL, borderWidth: 2, pointRadius: 0, fill: false,
             },
@@ -348,8 +369,9 @@
     });
 
     async function saveModel(mtype) {
-      const nameEl = document.getElementById(mtype + '-save-name');
-      const msgEl  = document.getElementById(mtype + '-save-msg');
+      const prefix = mtype.startsWith('lr') ? 'lr' : 'rf';
+      const nameEl = document.getElementById(prefix + '-save-name');
+      const msgEl  = document.getElementById(prefix + '-save-msg');
       const btn    = nameEl.nextElementSibling;
       const name   = nameEl.value.trim() || mtype.toUpperCase();
 

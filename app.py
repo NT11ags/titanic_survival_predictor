@@ -15,74 +15,113 @@ from sklearn.preprocessing import StandardScaler
 
 app = Flask(__name__)
 
-MODEL_PATHS   = {"lr": "model_lr.pkl",    "rf": "model_rf.pkl"}
-METRICS_PATHS = {"lr": "metrics_lr.json", "rf": "metrics_rf.json"}
+MODEL_PATHS = {
+    "lr":    "model_lr.pkl",    "rf":    "model_rf.pkl",
+    "lr_fe": "model_lr_fe.pkl", "rf_fe": "model_rf_fe.pkl",
+}
+METRICS_PATHS = {
+    "lr":    "metrics_lr.json",    "rf":    "metrics_rf.json",
+    "lr_fe": "metrics_lr_fe.json", "rf_fe": "metrics_rf_fe.json",
+}
+
+_FALLBACK_DATA = {
+    "Survived": [0,1,1,1,0,0,0,0,1,1,1,1,0,0,0,1,0,1,0,1,
+                 0,1,1,1,0,1,0,0,1,0,0,1,1,0,0,0,1,0,0,1,
+                 0,0,0,1,1,0,0,1,0,1,0,0,1,1,0,1,1,0,1,0,
+                 0,1,0,0,0,1,1,0,1,0,0,0,0,0,1,0,0,0,1,1],
+    "Pclass":   [3,1,3,1,3,3,1,3,3,2,3,1,3,3,3,2,3,2,3,3,
+                 2,2,3,1,3,3,1,3,3,3,1,1,3,2,3,1,3,3,3,3,
+                 3,3,3,2,3,3,3,1,3,3,3,3,1,2,3,1,3,2,3,3,
+                 3,1,3,3,3,2,3,3,1,3,3,3,3,3,2,3,3,3,3,2],
+    "Sex":      ["male","female","female","female","male","male","male","male","female","female",
+                 "female","female","male","male","female","female","male","male","female","female",
+                 "male","female","female","male","female","female","male","male","female","male",
+                 "male","female","female","male","male","male","male","male","female","female",
+                 "female","female","male","female","female","male","male","female","male","female",
+                 "male","male","female","female","male","male","female","male","female","male",
+                 "male","female","male","male","male","female","male","male","female","male",
+                 "male","male","male","male","female","male","male","male","female","female"],
+    "Age":      [22,38,26,35,35,28,54,2,27,14,4,58,20,39,14,55,2,31,31,35,
+                 34,15,28,8,38,28,19,28,28,28,40,28,28,28,28,28,28,21,18,14,
+                 40,27,28,3,19,28,28,22,28,28,28,28,28,28,28,28,28,28,28,28,
+                 28,36,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28],
+    "SibSp":    [1,1,0,1,0,0,0,3,0,1,1,0,0,1,0,0,4,0,1,0,
+                 0,0,0,3,1,0,0,0,1,0,0,1,0,0,0,0,1,0,0,0,
+                 0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,
+                 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    "Parch":    [0,0,0,0,0,0,0,1,2,0,1,0,0,5,0,0,1,0,0,0,
+                 0,0,0,1,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                 0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+                 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    "Fare":     [7.25,71.28,7.92,53.10,8.05,8.46,51.86,21.07,11.13,30.07,
+                 16.70,26.55,8.05,31.27,7.85,16.00,29.12,13.00,18.00,7.92,
+                 26.00,13.00,8.03,35.50,31.39,7.92,10.50,7.25,22.00,9.50,
+                 30.00,41.58,15.50,10.50,7.08,9.00,52.00,8.05,18.00,11.24,
+                 9.475,21.00,7.04,41.58,7.04,8.05,15.50,15.50,7.58,7.62,
+                 7.54,8.05,18.75,19.50,8.05,26.55,8.05,10.50,11.13,0.00,
+                 7.92,7.80,7.04,10.50,9.21,9.00,7.92,20.25,26.00,7.25,
+                 7.50,8.05,7.85,8.05,9.84,10.50,7.04,12.29,8.05,9.84],
+    "Embarked": ["S","C","S","S","S","Q","S","S","S","C","S","S","S","S","S",
+                 "S","Q","S","S","C","S","S","Q","S","S","S","C","S","S","S",
+                 "S","C","Q","S","S","S","S","S","S","C","S","S","S","S","S",
+                 "S","Q","S","S","S","S","S","S","S","S","S","S","S","C","S",
+                 "S","C","S","S","Q","S","S","S","C","S","Q","S","S","S","S",
+                 "S","S","C","S","S"],
+}
+
+
+def _fetch_df():
+    url = "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv"
+    try:
+        return pd.read_csv(url)
+    except Exception:
+        return pd.DataFrame(_FALLBACK_DATA)
 
 
 def _load_data():
-    url = "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv"
-    try:
-        df = pd.read_csv(url)
-    except Exception:
-        data = {
-            "Survived": [0,1,1,1,0,0,0,0,1,1,1,1,0,0,0,1,0,1,0,1,
-                         0,1,1,1,0,1,0,0,1,0,0,1,1,0,0,0,1,0,0,1,
-                         0,0,0,1,1,0,0,1,0,1,0,0,1,1,0,1,1,0,1,0,
-                         0,1,0,0,0,1,1,0,1,0,0,0,0,0,1,0,0,0,1,1],
-            "Pclass":   [3,1,3,1,3,3,1,3,3,2,3,1,3,3,3,2,3,2,3,3,
-                         2,2,3,1,3,3,1,3,3,3,1,1,3,2,3,1,3,3,3,3,
-                         3,3,3,2,3,3,3,1,3,3,3,3,1,2,3,1,3,2,3,3,
-                         3,1,3,3,3,2,3,3,1,3,3,3,3,3,2,3,3,3,3,2],
-            "Sex":      ["male","female","female","female","male","male","male","male","female","female",
-                         "female","female","male","male","female","female","male","male","female","female",
-                         "male","female","female","male","female","female","male","male","female","male",
-                         "male","female","female","male","male","male","male","male","female","female",
-                         "female","female","male","female","female","male","male","female","male","female",
-                         "male","male","female","female","male","male","female","male","female","male",
-                         "male","female","male","male","male","female","male","male","female","male",
-                         "male","male","male","male","female","male","male","male","female","female"],
-            "Age":      [22,38,26,35,35,28,54,2,27,14,4,58,20,39,14,55,2,31,31,35,
-                         34,15,28,8,38,28,19,28,28,28,40,28,28,28,28,28,28,21,18,14,
-                         40,27,28,3,19,28,28,22,28,28,28,28,28,28,28,28,28,28,28,28,
-                         28,36,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28],
-            "SibSp":    [1,1,0,1,0,0,0,3,0,1,1,0,0,1,0,0,4,0,1,0,
-                         0,0,0,3,1,0,0,0,1,0,0,1,0,0,0,0,1,0,0,0,
-                         0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,
-                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            "Parch":    [0,0,0,0,0,0,0,1,2,0,1,0,0,5,0,0,1,0,0,0,
-                         0,0,0,1,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-                         0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-                         0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-            "Fare":     [7.25,71.28,7.92,53.10,8.05,8.46,51.86,21.07,11.13,30.07,
-                         16.70,26.55,8.05,31.27,7.85,16.00,29.12,13.00,18.00,7.92,
-                         26.00,13.00,8.03,35.50,31.39,7.92,10.50,7.25,22.00,9.50,
-                         30.00,41.58,15.50,10.50,7.08,9.00,52.00,8.05,18.00,11.24,
-                         9.475,21.00,7.04,41.58,7.04,8.05,15.50,15.50,7.58,7.62,
-                         7.54,8.05,18.75,19.50,8.05,26.55,8.05,10.50,11.13,0.00,
-                         7.92,7.80,7.04,10.50,9.21,9.00,7.92,20.25,26.00,7.25,
-                         7.50,8.05,7.85,8.05,9.84,10.50,7.04,12.29,8.05,9.84],
-            "Embarked": ["S","C","S","S","S","Q","S","S","S","C","S","S","S","S","S",
-                         "S","Q","S","S","C","S","S","Q","S","S","S","C","S","S","S",
-                         "S","C","Q","S","S","S","S","S","S","C","S","S","S","S","S",
-                         "S","Q","S","S","S","S","S","S","S","S","S","S","S","C","S",
-                         "S","C","S","S","Q","S","S","S","C","S","Q","S","S","S","S",
-                         "S","S","C","S","S"],
-        }
-        df = pd.DataFrame(data)
-
+    df = _fetch_df()
     features = ["Pclass", "Sex", "Age", "SibSp", "Parch", "Fare", "Embarked"]
     df = df[features + ["Survived"]].dropna()
     df["Sex"]      = df["Sex"].map({"male": 0, "female": 1})
     df["Embarked"] = df["Embarked"].map({"S": 0, "C": 1, "Q": 2}).fillna(0)
+    X, y = df[features], df["Survived"]
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    return X_train, X_test, y_train, y_test, features
 
-    X = df[features]
-    y = df["Survived"]
+
+def _load_data_fe():
+    df = _fetch_df()
+
+    # Extract title from Name column if available, otherwise approximate from Sex/Age
+    if "Name" in df.columns:
+        df["Title"] = df["Name"].str.extract(r',\s*([^.]+)\.').iloc[:, 0].str.strip()
+        df["Title"] = df["Title"].replace({"Mlle": "Miss", "Ms": "Miss", "Mme": "Mrs"})
+        df["Title"] = df["Title"].apply(
+            lambda t: t if t in {"Mr", "Mrs", "Miss", "Master"} else "Rare"
+        )
+    else:
+        df["Title"] = df.apply(
+            lambda r: ("Master" if r["Age"] <= 14 else "Mr") if r["Sex"] == "male"
+                      else ("Miss" if r["Age"] <= 14 else "Mrs"),
+            axis=1,
+        )
+
+    df["FamilySize"] = df["SibSp"] + df["Parch"] + 1
+    df["AgeBin"]     = pd.cut(df["Age"], bins=[-1, 12, 17, 60, 100], labels=False)
+
+    df["Sex"]      = df["Sex"].map({"male": 0, "female": 1})
+    df["Embarked"] = df["Embarked"].map({"S": 0, "C": 1, "Q": 2}).fillna(0)
+    df["Title"]    = df["Title"].map({"Mr": 0, "Mrs": 1, "Miss": 2, "Master": 3, "Rare": 4}).fillna(4)
+
+    features = ["Pclass", "Sex", "AgeBin", "SibSp", "Parch", "Fare", "Embarked", "Title", "FamilySize"]
+    df = df[features + ["Survived"]].dropna()
+    X, y = df[features], df["Survived"]
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     return X_train, X_test, y_train, y_test, features
 
 
 def _build_pipeline(model_type):
-    if model_type == "rf":
+    if "rf" in model_type:
         return Pipeline([("model", RandomForestClassifier(n_estimators=100, random_state=42))])
     return Pipeline([
         ("scaler", StandardScaler()),
@@ -93,21 +132,22 @@ def _build_pipeline(model_type):
 def _compute_metrics(pipeline, X_test, y_test, features, model_type):
     from datetime import datetime
     trained_at = datetime.now().strftime("%d/%m/%Y %H:%M")
-    accuracy = pipeline.score(X_test, y_test)
-    y_pred   = pipeline.predict(X_test)
-    y_proba  = pipeline.predict_proba(X_test)[:, 1]
-    cm       = confusion_matrix(y_test, y_pred)
+    accuracy   = pipeline.score(X_test, y_test)
+    y_pred     = pipeline.predict(X_test)
+    y_proba    = pipeline.predict_proba(X_test)[:, 1]
+    cm         = confusion_matrix(y_test, y_pred)
     fpr, tpr, _ = roc_curve(y_test, y_proba)
-    roc_auc  = auc(fpr, tpr)
+    roc_auc    = auc(fpr, tpr)
+    fe_suffix  = " (Feature Engineered)" if "fe" in model_type else ""
 
-    if model_type == "rf":
+    if "rf" in model_type:
         feature_values      = pipeline.named_steps["model"].feature_importances_.tolist()
         feature_chart_label = "Importance"
-        model_name          = "Random Forest"
+        model_name          = "Random Forest" + fe_suffix
     else:
         feature_values      = pipeline.named_steps["model"].coef_[0].tolist()
         feature_chart_label = "Coefficient value"
-        model_name          = "Logistic Regression"
+        model_name          = "Logistic Regression" + fe_suffix
 
     return {
         "model_name":          model_name,
@@ -141,13 +181,20 @@ def train_model(model_type, X_train, X_test, y_train, y_test, features):
     return pipeline, metrics
 
 
-# Load or train both models at startup
-need_data = any(
+# ── Startup: load or train all four models ────────────────────────────────────
+need_base = any(
     not (os.path.exists(MODEL_PATHS[t]) and os.path.exists(METRICS_PATHS[t]))
     for t in ("lr", "rf")
 )
-if need_data:
-    _X_train, _X_test, _y_train, _y_test, _features = _load_data()
+need_fe = any(
+    not (os.path.exists(MODEL_PATHS[t]) and os.path.exists(METRICS_PATHS[t]))
+    for t in ("lr_fe", "rf_fe")
+)
+
+if need_base:
+    _X_tr, _X_te, _y_tr, _y_te, _feats = _load_data()
+if need_fe:
+    _X_tr_fe, _X_te_fe, _y_tr_fe, _y_te_fe, _feats_fe = _load_data_fe()
 
 models      = {}
 all_metrics = {}
@@ -160,10 +207,22 @@ for mtype in ("lr", "rf"):
             all_metrics[mtype] = json.load(f)
     else:
         models[mtype], all_metrics[mtype] = train_model(
-            mtype, _X_train, _X_test, _y_train, _y_test, _features
+            mtype, _X_tr, _X_te, _y_tr, _y_te, _feats
+        )
+
+for mtype in ("lr_fe", "rf_fe"):
+    if os.path.exists(MODEL_PATHS[mtype]) and os.path.exists(METRICS_PATHS[mtype]):
+        with open(MODEL_PATHS[mtype], "rb") as f:
+            models[mtype] = pickle.load(f)
+        with open(METRICS_PATHS[mtype], "r") as f:
+            all_metrics[mtype] = json.load(f)
+    else:
+        models[mtype], all_metrics[mtype] = train_model(
+            mtype, _X_tr_fe, _X_te_fe, _y_tr_fe, _y_te_fe, _feats_fe
         )
 
 
+# ── Routes ────────────────────────────────────────────────────────────────────
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -172,6 +231,11 @@ def index():
 @app.route("/stats")
 def stats():
     return render_template("stats.html")
+
+
+@app.route("/fe-stats")
+def fe_stats():
+    return render_template("fe_stats.html")
 
 
 @app.route("/metrics")
@@ -247,9 +311,20 @@ def predict():
         fare     = float(data["fare"])
         embarked = {"S": 0, "C": 1, "Q": 2}.get(data["embarked"], 0)
 
-        features    = np.array([[pclass, sex, age, sibsp, parch, fare, embarked]])
-        prediction  = models[mtype].predict(features)[0]
-        probability = models[mtype].predict_proba(features)[0]
+        if "fe" in mtype:
+            age_bin     = 0 if age <= 12 else 1 if age <= 17 else 2 if age <= 60 else 3
+            family_size = sibsp + parch + 1
+            # Approximate title from sex and age (no Name field in predictor)
+            if sex == 0:
+                title = 3 if age <= 14 else 0   # Master or Mr
+            else:
+                title = 2 if age <= 14 else 1   # Miss or Mrs
+            feat_arr = np.array([[pclass, sex, age_bin, sibsp, parch, fare, embarked, title, family_size]])
+        else:
+            feat_arr = np.array([[pclass, sex, age, sibsp, parch, fare, embarked]])
+
+        prediction  = models[mtype].predict(feat_arr)[0]
+        probability = models[mtype].predict_proba(feat_arr)[0]
 
         return jsonify({
             "survived":             bool(prediction),
