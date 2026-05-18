@@ -281,6 +281,10 @@ def compare():
 def tuning_stats():
     return render_template("tuning_stats.html")
 
+@app.route("/tuned-stats")
+def tuned_stats():
+    return render_template("tuned_stats.html")
+
 @app.route("/metrics")
 def metrics():
     mtype = request.args.get("model", "lr")
