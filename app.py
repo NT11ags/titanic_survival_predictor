@@ -9,7 +9,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (auc, confusion_matrix, f1_score,
                              precision_score, recall_score, roc_curve)
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -122,11 +122,26 @@ def _load_data_fe():
 
 def _build_pipeline(model_type):
     if "rf" in model_type:
-        return Pipeline([("model", RandomForestClassifier(n_estimators=100, random_state=42))])
+        return Pipeline([("model", RandomForestClassifier(random_state=42))])
     return Pipeline([
         ("scaler", StandardScaler()),
-        ("model",  LogisticRegression(max_iter=1000, random_state=42)),
+        ("model",  LogisticRegression(random_state=42)),
     ])
+
+
+def _build_param_grid(model_type):
+    if "rf" in model_type:
+        return {
+            "model__n_estimators":     [50, 100, 200],
+            "model__max_depth":        [None, 10, 20],
+            "model__min_samples_split":[2, 5],
+            "model__min_samples_leaf": [1, 2],
+        }
+    return {
+        "model__C":        [0.01, 0.1, 1, 10, 100],
+        "model__solver":   ["lbfgs", "liblinear"],
+        "model__max_iter": [500, 1000],
+    }
 
 
 def _compute_metrics(pipeline, X_test, y_test, features, model_type):
@@ -167,18 +182,26 @@ def _compute_metrics(pipeline, X_test, y_test, features, model_type):
 
 
 def train_model(model_type, X_train, X_test, y_train, y_test, features):
-    pipeline = _build_pipeline(model_type)
-    pipeline.fit(X_train, y_train)
-    print(f"[{model_type.upper()}] Test accuracy: {pipeline.score(X_test, y_test):.2%}")
+    grid_search = GridSearchCV(
+        _build_pipeline(model_type),
+        _build_param_grid(model_type),
+        cv=5, scoring="accuracy", n_jobs=-1,
+    )
+    grid_search.fit(X_train, y_train)
+    best = grid_search.best_estimator_
+
+    print(f"[{model_type.upper()}] Best params: {grid_search.best_params_}")
+    print(f"[{model_type.upper()}] Test accuracy: {best.score(X_test, y_test):.2%}")
 
     with open(MODEL_PATHS[model_type], "wb") as f:
-        pickle.dump(pipeline, f)
+        pickle.dump(best, f)
 
-    metrics = _compute_metrics(pipeline, X_test, y_test, features, model_type)
+    metrics = _compute_metrics(best, X_test, y_test, features, model_type)
+    metrics["best_params"] = grid_search.best_params_
     with open(METRICS_PATHS[model_type], "w") as f:
         json.dump(metrics, f)
 
-    return pipeline, metrics
+    return best, metrics
 
 
 # ── Startup: load or train all four models ────────────────────────────────────
