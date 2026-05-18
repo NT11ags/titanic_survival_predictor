@@ -5,7 +5,7 @@ import pickle
 import numpy as np
 import pandas as pd
 from flask import Flask, jsonify, render_template, request
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (auc, confusion_matrix, f1_score,
                              precision_score, recall_score, roc_curve)
@@ -22,8 +22,10 @@ MODEL_PATHS = {
     "rf_fe":       "model_rf_fe.pkl",
     "lr_tuned":    "model_lr_tuned.pkl",
     "rf_tuned":    "model_rf_tuned.pkl",
-    "lr_fe_tuned": "model_lr_fe_tuned.pkl",
-    "rf_fe_tuned": "model_rf_fe_tuned.pkl",
+    "lr_fe_tuned":    "model_lr_fe_tuned.pkl",
+    "rf_fe_tuned":    "model_rf_fe_tuned.pkl",
+    "ensemble_fe":    "model_ensemble_fe.pkl",
+    "ensemble_tuned": "model_ensemble_tuned.pkl",
 }
 METRICS_PATHS = {k: v.replace("model_", "metrics_").replace(".pkl", ".json")
                  for k, v in MODEL_PATHS.items()}
@@ -153,21 +155,29 @@ def _compute_metrics(pipeline, X_test, y_test, features, model_type):
     fpr, tpr, _ = roc_curve(y_test, y_proba)
     roc_auc    = auc(fpr, tpr)
 
-    is_rf    = "rf"    in model_type
-    is_fe    = "fe"    in model_type
-    is_tuned = "tuned" in model_type
+    is_rf       = "rf"       in model_type
+    is_fe       = "fe"       in model_type
+    is_tuned    = "tuned"    in model_type
+    is_ensemble = "ensemble" in model_type
 
-    base_name    = "Random Forest"          if is_rf    else "Logistic Regression"
-    fe_suffix    = " (FE)"                  if is_fe    else ""
-    tuned_suffix = " + Tuned"               if is_tuned else ""
-    model_name   = base_name + fe_suffix + tuned_suffix
-
-    if is_rf:
-        feature_values      = pipeline.named_steps["model"].feature_importances_.tolist()
-        feature_chart_label = "Importance"
+    if is_ensemble:
+        fe_suffix    = " (FE)"    if is_fe    else ""
+        tuned_suffix = " Tuned"   if is_tuned else ""
+        model_name   = "Ensemble LR + RF" + fe_suffix + tuned_suffix
+        feature_values      = []
+        feature_chart_label = ""
     else:
-        feature_values      = pipeline.named_steps["model"].coef_[0].tolist()
-        feature_chart_label = "Coefficient value"
+        base_name    = "Random Forest"     if is_rf    else "Logistic Regression"
+        fe_suffix    = " (FE)"             if is_fe    else ""
+        tuned_suffix = " + Tuned"          if is_tuned else ""
+        model_name   = base_name + fe_suffix + tuned_suffix
+
+        if is_rf:
+            feature_values      = pipeline.named_steps["model"].feature_importances_.tolist()
+            feature_chart_label = "Importance"
+        else:
+            feature_values      = pipeline.named_steps["model"].coef_[0].tolist()
+            feature_chart_label = "Coefficient value"
 
     return {
         "model_name":          model_name,
@@ -216,18 +226,46 @@ def train_model(model_type, X_train, X_test, y_train, y_test, features):
     return best, metrics
 
 
-# ── Startup: load or train all eight models ───────────────────────────────────
-BASE_TYPES = ("lr", "rf", "lr_tuned", "rf_tuned")
-FE_TYPES   = ("lr_fe", "rf_fe", "lr_fe_tuned", "rf_fe_tuned")
+def _build_ensemble_pipeline(model_type, metrics_cache=None):
+    """VotingClassifier combining LR and RF. For tuned variant, applies best params."""
+    lr_pipe = _build_pipeline("lr")
+    rf_pipe = _build_pipeline("rf")
+    if "tuned" in model_type and metrics_cache:
+        lr_params = metrics_cache.get("lr_tuned", {}).get("best_params", {})
+        rf_params = metrics_cache.get("rf_tuned", {}).get("best_params", {})
+        if lr_params:
+            lr_pipe.set_params(**lr_params)
+        if rf_params:
+            rf_pipe.set_params(**rf_params)
+    return VotingClassifier(
+        estimators=[("lr", lr_pipe), ("rf", rf_pipe)],
+        voting="soft",
+    )
 
-need_base = any(
-    not (os.path.exists(MODEL_PATHS[t]) and os.path.exists(METRICS_PATHS[t]))
-    for t in BASE_TYPES
-)
-need_fe = any(
-    not (os.path.exists(MODEL_PATHS[t]) and os.path.exists(METRICS_PATHS[t]))
-    for t in FE_TYPES
-)
+
+def train_ensemble(model_type, X_train, X_test, y_train, y_test, features, metrics_cache):
+    vc = _build_ensemble_pipeline(model_type, metrics_cache)
+    vc.fit(X_train, y_train)
+    print(f"[{model_type.upper()}] Test accuracy: {vc.score(X_test, y_test):.2%}")
+    with open(MODEL_PATHS[model_type], "wb") as f:
+        pickle.dump(vc, f)
+    metrics = _compute_metrics(vc, X_test, y_test, features, model_type)
+    metrics["best_params"] = {}
+    with open(METRICS_PATHS[model_type], "w") as f:
+        json.dump(metrics, f)
+    return vc, metrics
+
+
+# ── Startup: load or train all ten models ─────────────────────────────────────
+BASE_TYPES = ("lr", "rf", "lr_tuned", "rf_tuned")
+FE_TYPES       = ("lr_fe", "rf_fe", "lr_fe_tuned", "rf_fe_tuned")
+ENSEMBLE_TYPES = ("ensemble_fe", "ensemble_tuned")
+
+def _missing(t):
+    return not (os.path.exists(MODEL_PATHS[t]) and os.path.exists(METRICS_PATHS[t]))
+
+need_base = any(_missing(t) for t in BASE_TYPES + ("ensemble_tuned",))
+need_fe   = any(_missing(t) for t in FE_TYPES   + ("ensemble_fe",))
 
 if need_base:
     _X_tr, _X_te, _y_tr, _y_te, _feats = _load_data()
@@ -259,6 +297,22 @@ for mtype in FE_TYPES:
             mtype, _X_tr_fe, _X_te_fe, _y_tr_fe, _y_te_fe, _feats_fe
         )
 
+for mtype in ENSEMBLE_TYPES:
+    if os.path.exists(MODEL_PATHS[mtype]) and os.path.exists(METRICS_PATHS[mtype]):
+        with open(MODEL_PATHS[mtype], "rb") as f:
+            models[mtype] = pickle.load(f)
+        with open(METRICS_PATHS[mtype], "r") as f:
+            all_metrics[mtype] = json.load(f)
+    else:
+        if "fe" in mtype:
+            models[mtype], all_metrics[mtype] = train_ensemble(
+                mtype, _X_tr_fe, _X_te_fe, _y_tr_fe, _y_te_fe, _feats_fe, all_metrics
+            )
+        else:
+            models[mtype], all_metrics[mtype] = train_ensemble(
+                mtype, _X_tr, _X_te, _y_tr, _y_te, _feats, all_metrics
+            )
+
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.route("/")
@@ -284,6 +338,10 @@ def tuning_stats():
 @app.route("/tuned-stats")
 def tuned_stats():
     return render_template("tuned_stats.html")
+
+@app.route("/ensemble-stats")
+def ensemble_stats():
+    return render_template("ensemble_stats.html")
 
 @app.route("/metrics")
 def metrics():
