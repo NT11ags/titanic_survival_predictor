@@ -7,7 +7,36 @@
     "recall": 0.651,
     "f1": 0.739,
     "auc": 0.83,
-    "confusion_matrix": [[73, 7], [22, 41]],
-    "notes": "Sex is by far the strongest predictor — being female strongly increases survival likelihood. Pclass and Age are the next most influential, both negatively correlated. Fare, Parch, Embarked, and SibSp have minimal influence."
+    "confusion_matrix": [
+      [
+        73,
+        7
+      ],
+      [
+        22,
+        41
+      ]
+    ],
+    "notes": "Sex is by far the strongest predictor \u2014 being female strongly increases survival likelihood. Pclass and Age are the next most influential, both negatively correlated. Fare, Parch, Embarked, and SibSp have minimal influence."
+  },
+  {
+    "name": "Random Forest \u2014 18/05/2026 10:52",
+    "date": "18/05/2026",
+    "accuracy": 0.7832,
+    "precision": 0.7667,
+    "recall": 0.7302,
+    "f1": 0.748,
+    "auc": 0.8385,
+    "confusion_matrix": [
+      [
+        66,
+        14
+      ],
+      [
+        17,
+        46
+      ]
+    ],
+    "notes": ""
   }
 ]

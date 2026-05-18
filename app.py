@@ -5,6 +5,7 @@ import pickle
 import numpy as np
 import pandas as pd
 from flask import Flask, jsonify, render_template, request
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (auc, confusion_matrix, f1_score,
                              precision_score, recall_score, roc_curve)
@@ -14,11 +15,11 @@ from sklearn.preprocessing import StandardScaler
 
 app = Flask(__name__)
 
-MODEL_PATH = "model.pkl"
-METRICS_PATH = "metrics.json"
+MODEL_PATHS   = {"lr": "model_lr.pkl",    "rf": "model_rf.pkl"}
+METRICS_PATHS = {"lr": "metrics_lr.json", "rf": "metrics_rf.json"}
 
 
-def train_model():
+def _load_data():
     url = "https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv"
     try:
         df = pd.read_csv(url)
@@ -71,59 +72,96 @@ def train_model():
 
     features = ["Pclass", "Sex", "Age", "SibSp", "Parch", "Fare", "Embarked"]
     df = df[features + ["Survived"]].dropna()
-
-    df["Sex"] = df["Sex"].map({"male": 0, "female": 1})
+    df["Sex"]      = df["Sex"].map({"male": 0, "female": 1})
     df["Embarked"] = df["Embarked"].map({"S": 0, "C": 1, "Q": 2}).fillna(0)
 
     X = df[features]
     y = df["Survived"]
-
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    return X_train, X_test, y_train, y_test, features
 
-    pipeline = Pipeline([
+
+def _build_pipeline(model_type):
+    if model_type == "rf":
+        return Pipeline([("model", RandomForestClassifier(n_estimators=100, random_state=42))])
+    return Pipeline([
         ("scaler", StandardScaler()),
-        ("model", LogisticRegression(max_iter=1000, random_state=42)),
+        ("model",  LogisticRegression(max_iter=1000, random_state=42)),
     ])
-    pipeline.fit(X_train, y_train)
+
+
+def _compute_metrics(pipeline, X_test, y_test, features, model_type):
+    from datetime import datetime
+    trained_at = datetime.now().strftime("%d/%m/%Y %H:%M")
     accuracy = pipeline.score(X_test, y_test)
-    print(f"Model trained. Test accuracy: {accuracy:.2%}")
-
-    with open(MODEL_PATH, "wb") as f:
-        pickle.dump(pipeline, f)
-
-    y_pred = pipeline.predict(X_test)
-    y_proba = pipeline.predict_proba(X_test)[:, 1]
-    cm = confusion_matrix(y_test, y_pred)
+    y_pred   = pipeline.predict(X_test)
+    y_proba  = pipeline.predict_proba(X_test)[:, 1]
+    cm       = confusion_matrix(y_test, y_pred)
     fpr, tpr, _ = roc_curve(y_test, y_proba)
-    roc_auc = auc(fpr, tpr)
-    coefficients = pipeline.named_steps["model"].coef_[0].tolist()
+    roc_auc  = auc(fpr, tpr)
 
-    metrics = {
-        "accuracy":         round(float(accuracy), 4),
-        "precision":        round(float(precision_score(y_test, y_pred, zero_division=0)), 4),
-        "recall":           round(float(recall_score(y_test, y_pred, zero_division=0)), 4),
-        "f1":               round(float(f1_score(y_test, y_pred, zero_division=0)), 4),
-        "confusion_matrix": cm.tolist(),
-        "fpr":              [round(x, 4) for x in fpr.tolist()],
-        "tpr":              [round(x, 4) for x in tpr.tolist()],
-        "roc_auc":          round(float(roc_auc), 4),
-        "feature_names":    features,
-        "coefficients":     [round(x, 4) for x in coefficients],
+    if model_type == "rf":
+        feature_values      = pipeline.named_steps["model"].feature_importances_.tolist()
+        feature_chart_label = "Importance"
+        model_name          = "Random Forest"
+    else:
+        feature_values      = pipeline.named_steps["model"].coef_[0].tolist()
+        feature_chart_label = "Coefficient value"
+        model_name          = "Logistic Regression"
+
+    return {
+        "model_name":          model_name,
+        "trained_at":          trained_at,
+        "feature_chart_label": feature_chart_label,
+        "accuracy":            round(float(accuracy), 4),
+        "precision":           round(float(precision_score(y_test, y_pred, zero_division=0)), 4),
+        "recall":              round(float(recall_score(y_test, y_pred, zero_division=0)), 4),
+        "f1":                  round(float(f1_score(y_test, y_pred, zero_division=0)), 4),
+        "confusion_matrix":    cm.tolist(),
+        "fpr":                 [round(x, 4) for x in fpr.tolist()],
+        "tpr":                 [round(x, 4) for x in tpr.tolist()],
+        "roc_auc":             round(float(roc_auc), 4),
+        "feature_names":       list(features),
+        "coefficients":        [round(x, 4) for x in feature_values],
     }
 
-    with open(METRICS_PATH, "w") as f:
+
+def train_model(model_type, X_train, X_test, y_train, y_test, features):
+    pipeline = _build_pipeline(model_type)
+    pipeline.fit(X_train, y_train)
+    print(f"[{model_type.upper()}] Test accuracy: {pipeline.score(X_test, y_test):.2%}")
+
+    with open(MODEL_PATHS[model_type], "wb") as f:
+        pickle.dump(pipeline, f)
+
+    metrics = _compute_metrics(pipeline, X_test, y_test, features, model_type)
+    with open(METRICS_PATHS[model_type], "w") as f:
         json.dump(metrics, f)
 
     return pipeline, metrics
 
 
-if os.path.exists(MODEL_PATH) and os.path.exists(METRICS_PATH):
-    with open(MODEL_PATH, "rb") as f:
-        model = pickle.load(f)
-    with open(METRICS_PATH, "r") as f:
-        model_metrics = json.load(f)
-else:
-    model, model_metrics = train_model()
+# Load or train both models at startup
+need_data = any(
+    not (os.path.exists(MODEL_PATHS[t]) and os.path.exists(METRICS_PATHS[t]))
+    for t in ("lr", "rf")
+)
+if need_data:
+    _X_train, _X_test, _y_train, _y_test, _features = _load_data()
+
+models      = {}
+all_metrics = {}
+
+for mtype in ("lr", "rf"):
+    if os.path.exists(MODEL_PATHS[mtype]) and os.path.exists(METRICS_PATHS[mtype]):
+        with open(MODEL_PATHS[mtype], "rb") as f:
+            models[mtype] = pickle.load(f)
+        with open(METRICS_PATHS[mtype], "r") as f:
+            all_metrics[mtype] = json.load(f)
+    else:
+        models[mtype], all_metrics[mtype] = train_model(
+            mtype, _X_train, _X_test, _y_train, _y_test, _features
+        )
 
 
 @app.route("/")
@@ -138,7 +176,10 @@ def stats():
 
 @app.route("/metrics")
 def metrics():
-    return jsonify(model_metrics)
+    mtype = request.args.get("model", "lr")
+    if mtype not in all_metrics:
+        return jsonify({"error": "Unknown model"}), 400
+    return jsonify(all_metrics[mtype])
 
 
 @app.route("/previous-models")
@@ -158,18 +199,22 @@ def history_data():
 @app.route("/save-model", methods=["POST"])
 def save_model():
     from datetime import date
-    data = request.get_json()
-    name = (data.get("name") or "Logistic Regressor").strip()
+    data  = request.get_json()
+    name  = (data.get("name") or "Model").strip()
+    mtype = data.get("model", "lr")
+    if mtype not in all_metrics:
+        return jsonify({"error": "Unknown model"}), 400
 
+    m = all_metrics[mtype]
     entry = {
         "name":             name,
         "date":             date.today().strftime("%d/%m/%Y"),
-        "accuracy":         model_metrics["accuracy"],
-        "precision":        model_metrics["precision"],
-        "recall":           model_metrics["recall"],
-        "f1":               model_metrics["f1"],
-        "auc":              model_metrics["roc_auc"],
-        "confusion_matrix": model_metrics["confusion_matrix"],
+        "accuracy":         m["accuracy"],
+        "precision":        m["precision"],
+        "recall":           m["recall"],
+        "f1":               m["f1"],
+        "auc":              m["roc_auc"],
+        "confusion_matrix": m["confusion_matrix"],
         "notes":            "",
     }
 
@@ -188,7 +233,10 @@ def save_model():
 
 @app.route("/predict", methods=["POST"])
 def predict():
-    data = request.get_json()
+    data  = request.get_json()
+    mtype = data.get("model", "lr")
+    if mtype not in models:
+        return jsonify({"error": "Unknown model"}), 400
 
     try:
         pclass   = int(data["pclass"])
@@ -199,9 +247,9 @@ def predict():
         fare     = float(data["fare"])
         embarked = {"S": 0, "C": 1, "Q": 2}.get(data["embarked"], 0)
 
-        features   = np.array([[pclass, sex, age, sibsp, parch, fare, embarked]])
-        prediction = model.predict(features)[0]
-        probability = model.predict_proba(features)[0]
+        features    = np.array([[pclass, sex, age, sibsp, parch, fare, embarked]])
+        prediction  = models[mtype].predict(features)[0]
+        probability = models[mtype].predict_proba(features)[0]
 
         return jsonify({
             "survived":             bool(prediction),

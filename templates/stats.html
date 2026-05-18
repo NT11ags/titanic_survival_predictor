@@ -174,7 +174,21 @@
     </nav>
     <p class="tagline">RMS Titanic · Model Analysis</p>
     <h1><em>Model</em> Performance</h1>
-    <p class="subtitle">Logistic regression evaluated on held-out test data</p>
+    <p class="subtitle" id="subtitle">Evaluated on held-out test data</p>
+    <div style="display:flex;justify-content:center;gap:0;margin-top:1.2rem;">
+      <a id="tab-lr" href="/stats?model=lr" style="
+        font-family:'Courier Prime',monospace; font-size:0.65rem; letter-spacing:0.2em;
+        text-transform:uppercase; text-decoration:none; padding:0.5rem 1.2rem;
+        border:1px solid rgba(201,168,76,0.3); border-right:none;
+        transition:all 0.2s;
+      ">Logistic Regression</a>
+      <a id="tab-rf" href="/stats?model=rf" style="
+        font-family:'Courier Prime',monospace; font-size:0.65rem; letter-spacing:0.2em;
+        text-transform:uppercase; text-decoration:none; padding:0.5rem 1.2rem;
+        border:1px solid rgba(201,168,76,0.3);
+        transition:all 0.2s;
+      ">Random Forest</a>
+    </div>
   </header>
 
   <div class="save-bar">
@@ -221,7 +235,23 @@
     Chart.defaults.color = FOG;
     Chart.defaults.borderColor = 'rgba(201,168,76,0.1)';
 
-    fetch('/metrics').then(r => r.json()).then(m => {
+    const mtype = new URLSearchParams(location.search).get('model') || 'lr';
+
+    // Highlight active tab
+    const activeTab = document.getElementById('tab-' + mtype);
+    if (activeTab) {
+      activeTab.style.background = GOLD;
+      activeTab.style.color = '#1a2744';
+      activeTab.style.borderColor = GOLD;
+    }
+    const inactiveTab = document.getElementById(mtype === 'lr' ? 'tab-rf' : 'tab-lr');
+    if (inactiveTab) { inactiveTab.style.color = FOG; }
+
+    fetch('/metrics?model=' + mtype).then(r => r.json()).then(m => {
+      document.getElementById('subtitle').textContent =
+        m.model_name + ' — evaluated on held-out test data';
+      document.getElementById('model-name').value =
+        m.model_name + ' — ' + (m.trained_at || new Date().toLocaleString());
       // Stat cards
       document.getElementById('s-acc').textContent = pct(m.accuracy);
       document.getElementById('s-pre').textContent = pct(m.precision);
@@ -269,25 +299,32 @@
         },
       });
 
-      // Feature coefficients
+      // Feature importance / coefficients
       const pairs = m.feature_names.map((n, i) => ({ n, v: m.coefficients[i] }))
                                    .sort((a, b) => a.v - b.v);
+      const allPositive = pairs.every(p => p.v >= 0);
       new Chart(document.getElementById('coef-chart'), {
         type: 'bar',
         data: {
           labels: pairs.map(p => p.n),
           datasets: [{
-            label: 'Coefficient',
+            label: m.feature_chart_label,
             data: pairs.map(p => p.v),
-            backgroundColor: pairs.map(p => p.v >= 0 ? 'rgba(100,200,150,0.5)' : 'rgba(200,80,60,0.5)'),
-            borderColor:     pairs.map(p => p.v >= 0 ? 'rgba(100,200,150,0.8)' : 'rgba(200,80,60,0.8)'),
+            backgroundColor: pairs.map(p =>
+              allPositive ? 'rgba(201,168,76,0.5)'
+                          : p.v >= 0 ? 'rgba(100,200,150,0.5)' : 'rgba(200,80,60,0.5)'
+            ),
+            borderColor: pairs.map(p =>
+              allPositive ? 'rgba(201,168,76,0.8)'
+                          : p.v >= 0 ? 'rgba(100,200,150,0.8)' : 'rgba(200,80,60,0.8)'
+            ),
             borderWidth: 1,
           }],
         },
         options: {
           indexAxis: 'y',
           plugins: { legend: { display: false } },
-          scales: { x: { title: { display: true, text: 'Coefficient value' } } },
+          scales: { x: { title: { display: true, text: m.feature_chart_label } } },
         },
       });
     });
@@ -306,7 +343,7 @@
         const resp = await fetch('/save-model', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name }),
+          body: JSON.stringify({ name, model: mtype }),
         });
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'Server error');

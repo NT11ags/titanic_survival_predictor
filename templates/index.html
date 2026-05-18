@@ -430,6 +430,20 @@
 
     <div class="form-grid">
 
+      <div class="field full">
+        <label>Prediction Model</label>
+        <div class="radio-group">
+          <label>
+            <input type="radio" name="model" value="lr" checked />
+            <span>Logistic Regression</span>
+          </label>
+          <label>
+            <input type="radio" name="model" value="rf" />
+            <span>Random Forest</span>
+          </label>
+        </div>
+      </div>
+
       <div class="field">
         <label for="pclass">Ticket Class</label>
         <select id="pclass">
@@ -494,7 +508,7 @@
   <div class="ship-deco">🚢 · · · · · · · · · · · ·</div>
 
   <div style="display:flex;gap:2rem;margin-top:1.5rem;">
-    <a href="/stats" style="
+    <a id="stats-link" href="/stats?model=lr" style="
       font-family:'Courier Prime',monospace; font-size:0.65rem;
       letter-spacing:0.25em; text-transform:uppercase;
       color:var(--gold); text-decoration:none; opacity:0.6; transition:opacity 0.2s;
@@ -509,6 +523,13 @@
       Previous Models →
     </a>
   </div>
+  <script>
+    document.querySelectorAll('input[name="model"]').forEach(r =>
+      r.addEventListener('change', () => {
+        document.getElementById('stats-link').href = '/stats?model=' + r.value;
+      })
+    );
+  </script>
 
   <script>
     async function predict() {
@@ -521,6 +542,7 @@
       btn.disabled = true;
 
       const payload = {
+        model:    document.querySelector('input[name="model"]:checked').value,
         pclass:   document.getElementById('pclass').value,
         sex:      document.querySelector('input[name="sex"]:checked').value,
         age:      document.getElementById('age').value,
