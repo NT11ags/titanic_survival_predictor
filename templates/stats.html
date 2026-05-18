@@ -83,34 +83,7 @@
     }
     @media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
 
-    /* Metrics comparison table */
-    .compare-table {
-      width: 100%; border-collapse: collapse;
-    }
-    .compare-table th, .compare-table td {
-      padding: 0.8rem 1.2rem; text-align: center;
-    }
-    .compare-table thead th {
-      font-family: 'Courier Prime', monospace;
-      font-size: 0.65rem; letter-spacing: 0.2em; text-transform: uppercase;
-      padding-bottom: 1rem; border-bottom: 1px solid rgba(201,168,76,0.2);
-    }
-    .compare-table thead th:first-child { text-align: left; color: var(--fog); }
-    .compare-table thead th.col-lr { color: var(--gold); }
-    .compare-table thead th.col-rf { color: var(--steel); }
-    .compare-table tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); }
-    .compare-table tbody tr:last-child { border-bottom: none; }
-    .compare-table tbody td:first-child {
-      font-family: 'Courier Prime', monospace;
-      font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase;
-      color: var(--fog); text-align: left;
-    }
-    .compare-table tbody td {
-      font-size: 1.5rem; font-weight: 300;
-    }
-    .compare-table tbody td.col-lr { color: var(--gold); }
-    .compare-table tbody td.col-rf { color: var(--steel); }
-    .compare-table tbody td.winner { font-weight: 600; }
+    #metrics-chart { max-height: 280px; }
 
     /* Confusion matrices */
     .cm-grid {
@@ -184,22 +157,7 @@
   <!-- Metrics comparison -->
   <div class="section chart-card">
     <div class="chart-title">Metrics Comparison</div>
-    <table class="compare-table">
-      <thead>
-        <tr>
-          <th></th>
-          <th class="col-lr">Logistic Regression</th>
-          <th class="col-rf">Random Forest</th>
-        </tr>
-      </thead>
-      <tbody id="metrics-body">
-        <tr><td>Accuracy</td> <td class="col-lr" id="lr-acc">—</td><td class="col-rf" id="rf-acc">—</td></tr>
-        <tr><td>Precision</td><td class="col-lr" id="lr-pre">—</td><td class="col-rf" id="rf-pre">—</td></tr>
-        <tr><td>Recall</td>   <td class="col-lr" id="lr-rec">—</td><td class="col-rf" id="rf-rec">—</td></tr>
-        <tr><td>F1 Score</td> <td class="col-lr" id="lr-f1" >—</td><td class="col-rf" id="rf-f1" >—</td></tr>
-        <tr><td>AUC</td>      <td class="col-lr" id="lr-auc">—</td><td class="col-rf" id="rf-auc">—</td></tr>
-      </tbody>
-    </table>
+    <canvas id="metrics-chart"></canvas>
   </div>
 
   <!-- ROC curves -->
@@ -267,21 +225,41 @@
       fetch('/metrics?model=rf').then(r => r.json()),
     ]).then(([lr, rf]) => {
 
-      // ── Metrics table ──────────────────────────────────────────
-      const rows = [
-        ['acc', lr.accuracy,  rf.accuracy],
-        ['pre', lr.precision, rf.precision],
-        ['rec', lr.recall,    rf.recall],
-        ['f1',  lr.f1,        rf.f1],
-        ['auc', lr.roc_auc,   rf.roc_auc],
-      ];
-      rows.forEach(([key, lv, rv]) => {
-        const lEl = document.getElementById('lr-' + key);
-        const rEl = document.getElementById('rf-' + key);
-        lEl.textContent = pct(lv);
-        rEl.textContent = pct(rv);
-        if (lv > rv) lEl.classList.add('winner');
-        else if (rv > lv) rEl.classList.add('winner');
+      // ── Metrics chart ──────────────────────────────────────────
+      new Chart(document.getElementById('metrics-chart'), {
+        type: 'bar',
+        data: {
+          labels: ['Accuracy', 'Precision', 'Recall', 'F1 Score', 'AUC'],
+          datasets: [
+            {
+              label: 'Logistic Regression',
+              data: [lr.accuracy, lr.precision, lr.recall, lr.f1, lr.roc_auc].map(v => +(v * 100).toFixed(1)),
+              backgroundColor: 'rgba(201,168,76,0.5)',
+              borderColor: GOLD,
+              borderWidth: 1,
+            },
+            {
+              label: 'Random Forest',
+              data: [rf.accuracy, rf.precision, rf.recall, rf.f1, rf.roc_auc].map(v => +(v * 100).toFixed(1)),
+              backgroundColor: 'rgba(106,176,200,0.5)',
+              borderColor: STEEL,
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          scales: {
+            y: {
+              min: 0, max: 100,
+              ticks: { callback: v => v + '%' },
+              title: { display: true, text: 'Score (%)' },
+            },
+          },
+          plugins: {
+            legend: { labels: { boxWidth: 12 } },
+            tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}%` } },
+          },
+        },
       });
 
       // ── Save name inputs ───────────────────────────────────────
