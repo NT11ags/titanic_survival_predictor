@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Base vs FE Comparison — Titanic Predictor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    :root {
+      --ink: #0d0d0d; --paper: #f5f0e8;
+      --gold: #c9a84c; --navy: #1a2744; --fog: #c8c0b0;
+      --gold-fe: #c87a4c;
+      --steel: #6ab0c8; --steel-fe: #4cb88c;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      background-color: var(--navy); color: var(--paper);
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 0 1rem 4rem; overflow-x: hidden;
+    }
+    body::before {
+      content: ''; position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse at 20% 80%, rgba(26,39,68,0.9) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%, rgba(10,20,45,0.8) 0%, transparent 60%),
+        linear-gradient(180deg, #0a1628 0%, #1a2744 40%, #0f1e38 100%);
+      z-index: -1;
+    }
+
+    header {
+      width: 100%; max-width: 960px;
+      text-align: center; padding: 3rem 1rem 2rem;
+    }
+    .back-link {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.65rem; letter-spacing: 0.2em; text-transform: uppercase;
+      color: var(--gold); text-decoration: none; opacity: 0.7; transition: opacity 0.2s;
+    }
+    .back-link:hover { opacity: 1; }
+    .tagline {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.65rem; letter-spacing: 0.35em;
+      text-transform: uppercase; color: var(--gold); margin-top: 1rem;
+    }
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 300;
+      letter-spacing: 0.04em; margin: 0.5rem 0 0.3rem;
+    }
+    h1 em { font-style: italic; color: var(--gold); }
+    .subtitle { font-size: 1rem; font-weight: 300; color: var(--fog); font-style: italic; }
+
+    /* Section divider */
+    .model-section { width: 100%; max-width: 960px; margin-bottom: 3rem; }
+    .model-section-header {
+      display: flex; align-items: center; gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+    .model-section-header h2 {
+      font-size: 1.4rem; font-weight: 300; letter-spacing: 0.04em; white-space: nowrap;
+    }
+    .model-section-header .rule { flex: 1; height: 1px; background: rgba(201,168,76,0.2); }
+
+    .legend {
+      display: flex; gap: 1.5rem; margin-bottom: 1.5rem; flex-wrap: wrap;
+    }
+    .legend-item {
+      display: flex; align-items: center; gap: 0.5rem;
+      font-family: 'Courier Prime', monospace; font-size: 0.62rem;
+      letter-spacing: 0.15em; text-transform: uppercase; color: var(--fog);
+    }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+    .section { margin-bottom: 1.5rem; }
+
+    .chart-card {
+      background: rgba(245,240,232,0.05);
+      border: 1px solid rgba(201,168,76,0.25);
+      border-radius: 2px; padding: 1.8rem 1.5rem;
+    }
+    .chart-title {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.6rem; letter-spacing: 0.3em; text-transform: uppercase;
+      color: var(--gold); margin-bottom: 1.2rem;
+      display: flex; align-items: center; gap: 1rem;
+    }
+    .chart-title::after { content: ''; flex: 1; height: 1px; background: rgba(201,168,76,0.2); }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
+
+    .cm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+    .cm-cell { border-radius: 2px; padding: 1rem 0.5rem; text-align: center; }
+    .cm-cell .cm-num { font-size: 1.8rem; font-weight: 300; display: block; }
+    .cm-cell .cm-lbl {
+      font-family: 'Courier Prime', monospace; font-size: 0.5rem;
+      letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,0.55);
+    }
+    .cm-tp, .cm-tn { background: rgba(40,120,80,0.3); border: 1px solid rgba(100,200,150,0.25); }
+    .cm-fp, .cm-fn { background: rgba(120,40,30,0.3); border: 1px solid rgba(200,80,60,0.25); }
+
+    canvas { max-height: 240px; }
+    #lr-metrics-chart, #rf-metrics-chart { max-height: 220px; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <nav style="display:flex;justify-content:center;gap:2rem;flex-wrap:wrap;">
+      <a class="back-link" href="/">← Predictor</a>
+      <a class="back-link" href="/stats">Base Models</a>
+      <a class="back-link" href="/fe-stats">FE Models</a>
+      <a class="back-link" href="/previous-models">Previous Models</a>
+    </nav>
+    <p class="tagline">RMS Titanic · Model Analysis</p>
+    <h1>Base <em>vs</em> Feature Engineered</h1>
+    <p class="subtitle">How much does feature engineering improve each model?</p>
+  </header>
+
+  <!-- ── Logistic Regression section ── -->
+  <div class="model-section" id="lr-section">
+    <div class="model-section-header">
+      <h2 style="color:var(--gold)">Logistic Regression</h2>
+      <div class="rule"></div>
+    </div>
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--gold)"></div> Base
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--gold-fe)"></div> Feature Engineered
+      </div>
+    </div>
+
+    <div class="section chart-card">
+      <div class="chart-title">Metrics</div>
+      <canvas id="lr-metrics-chart"></canvas>
+    </div>
+
+    <div class="section chart-card">
+      <div class="chart-title">ROC Curves</div>
+      <canvas id="lr-roc-chart"></canvas>
+    </div>
+
+    <div class="section two-col">
+      <div class="chart-card">
+        <div class="chart-title" style="color:var(--gold)">Confusion Matrix — Base</div>
+        <div class="cm-grid">
+          <div class="cm-cell cm-tp"><span class="cm-num" id="lr-b-tp">—</span><span class="cm-lbl">True Pos</span></div>
+          <div class="cm-cell cm-fp"><span class="cm-num" id="lr-b-fp">—</span><span class="cm-lbl">False Pos</span></div>
+          <div class="cm-cell cm-fn"><span class="cm-num" id="lr-b-fn">—</span><span class="cm-lbl">False Neg</span></div>
+          <div class="cm-cell cm-tn"><span class="cm-num" id="lr-b-tn">—</span><span class="cm-lbl">True Neg</span></div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title" style="color:var(--gold-fe)">Confusion Matrix — FE</div>
+        <div class="cm-grid">
+          <div class="cm-cell cm-tp"><span class="cm-num" id="lr-fe-tp">—</span><span class="cm-lbl">True Pos</span></div>
+          <div class="cm-cell cm-fp"><span class="cm-num" id="lr-fe-fp">—</span><span class="cm-lbl">False Pos</span></div>
+          <div class="cm-cell cm-fn"><span class="cm-num" id="lr-fe-fn">—</span><span class="cm-lbl">False Neg</span></div>
+          <div class="cm-cell cm-tn"><span class="cm-num" id="lr-fe-tn">—</span><span class="cm-lbl">True Neg</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Random Forest section ── -->
+  <div class="model-section" id="rf-section">
+    <div class="model-section-header">
+      <h2 style="color:var(--steel)">Random Forest</h2>
+      <div class="rule"></div>
+    </div>
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--steel)"></div> Base
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--steel-fe)"></div> Feature Engineered
+      </div>
+    </div>
+
+    <div class="section chart-card">
+      <div class="chart-title">Metrics</div>
+      <canvas id="rf-metrics-chart"></canvas>
+    </div>
+
+    <div class="section chart-card">
+      <div class="chart-title">ROC Curves</div>
+      <canvas id="rf-roc-chart"></canvas>
+    </div>
+
+    <div class="section two-col">
+      <div class="chart-card">
+        <div class="chart-title" style="color:var(--steel)">Confusion Matrix — Base</div>
+        <div class="cm-grid">
+          <div class="cm-cell cm-tp"><span class="cm-num" id="rf-b-tp">—</span><span class="cm-lbl">True Pos</span></div>
+          <div class="cm-cell cm-fp"><span class="cm-num" id="rf-b-fp">—</span><span class="cm-lbl">False Pos</span></div>
+          <div class="cm-cell cm-fn"><span class="cm-num" id="rf-b-fn">—</span><span class="cm-lbl">False Neg</span></div>
+          <div class="cm-cell cm-tn"><span class="cm-num" id="rf-b-tn">—</span><span class="cm-lbl">True Neg</span></div>
+        </div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title" style="color:var(--steel-fe)">Confusion Matrix — FE</div>
+        <div class="cm-grid">
+          <div class="cm-cell cm-tp"><span class="cm-num" id="rf-fe-tp">—</span><span class="cm-lbl">True Pos</span></div>
+          <div class="cm-cell cm-fp"><span class="cm-num" id="rf-fe-fp">—</span><span class="cm-lbl">False Pos</span></div>
+          <div class="cm-cell cm-fn"><span class="cm-num" id="rf-fe-fn">—</span><span class="cm-lbl">False Neg</span></div>
+          <div class="cm-cell cm-tn"><span class="cm-num" id="rf-fe-tn">—</span><span class="cm-lbl">True Neg</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const GOLD     = '#c9a84c';
+    const GOLD_FE  = '#c87a4c';
+    const STEEL    = '#6ab0c8';
+    const STEEL_FE = '#4cb88c';
+    const FOG      = '#c8c0b0';
+
+    Chart.defaults.color = FOG;
+    Chart.defaults.borderColor = 'rgba(201,168,76,0.1)';
+
+    function pct(v) { return (v * 100).toFixed(1) + '%'; }
+
+    function fillCM(prefix, m) {
+      const [[tn, fp], [fn, tp]] = m.confusion_matrix;
+      document.getElementById(prefix + '-tp').textContent = tp;
+      document.getElementById(prefix + '-fp').textContent = fp;
+      document.getElementById(prefix + '-fn').textContent = fn;
+      document.getElementById(prefix + '-tn').textContent = tn;
+    }
+
+    function metricsChart(canvasId, base, fe, colorBase, colorFE, labelBase, labelFE) {
+      const vals = m => [m.accuracy, m.precision, m.recall, m.f1, m.roc_auc]
+                          .map(v => +(v * 100).toFixed(1));
+      new Chart(document.getElementById(canvasId), {
+        type: 'bar',
+        data: {
+          labels: ['Accuracy', 'Precision', 'Recall', 'F1 Score', 'AUC'],
+          datasets: [
+            {
+              label: labelBase,
+              data: vals(base),
+              backgroundColor: colorBase + '80', borderColor: colorBase, borderWidth: 1,
+            },
+            {
+              label: labelFE,
+              data: vals(fe),
+              backgroundColor: colorFE + '80', borderColor: colorFE, borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          scales: {
+            y: {
+              min: 0, max: 100,
+              ticks: { callback: v => v + '%' },
+              title: { display: true, text: 'Score (%)' },
+            },
+          },
+          plugins: {
+            legend: { labels: { boxWidth: 12 } },
+            tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y}%` } },
+          },
+        },
+      });
+    }
+
+    function rocChart(canvasId, base, fe, colorBase, colorFE, labelBase, labelFE) {
+      new Chart(document.getElementById(canvasId), {
+        type: 'line',
+        data: {
+          datasets: [
+            {
+              label: `${labelBase} (AUC ${base.roc_auc})`,
+              data: base.fpr.map((x, i) => ({ x, y: base.tpr[i] })),
+              borderColor: colorBase, borderWidth: 2, pointRadius: 0, fill: false,
+            },
+            {
+              label: `${labelFE} (AUC ${fe.roc_auc})`,
+              data: fe.fpr.map((x, i) => ({ x, y: fe.tpr[i] })),
+              borderColor: colorFE, borderWidth: 2, pointRadius: 0, fill: false,
+            },
+            {
+              label: 'Random baseline',
+              data: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+              borderColor: 'rgba(255,255,255,0.15)', borderWidth: 1,
+              borderDash: [4, 4], pointRadius: 0, fill: false,
+            },
+          ],
+        },
+        options: {
+          parsing: false,
+          scales: {
+            x: { type: 'linear', title: { display: true, text: 'False Positive Rate' }, min: 0, max: 1 },
+            y: { type: 'linear', title: { display: true, text: 'True Positive Rate'  }, min: 0, max: 1 },
+          },
+          plugins: { legend: { labels: { boxWidth: 12 } } },
+        },
+      });
+    }
+
+    Promise.all([
+      fetch('/metrics?model=lr').then(r => r.json()),
+      fetch('/metrics?model=lr_fe').then(r => r.json()),
+      fetch('/metrics?model=rf').then(r => r.json()),
+      fetch('/metrics?model=rf_fe').then(r => r.json()),
+    ]).then(([lr, lr_fe, rf, rf_fe]) => {
+      metricsChart('lr-metrics-chart', lr, lr_fe, GOLD, GOLD_FE, 'Base', 'Feature Engineered');
+      rocChart('lr-roc-chart', lr, lr_fe, GOLD, GOLD_FE, 'Base', 'Feature Engineered');
+      fillCM('lr-b',  lr);
+      fillCM('lr-fe', lr_fe);
+
+      metricsChart('rf-metrics-chart', rf, rf_fe, STEEL, STEEL_FE, 'Base', 'Feature Engineered');
+      rocChart('rf-roc-chart', rf, rf_fe, STEEL, STEEL_FE, 'Base', 'Feature Engineered');
+      fillCM('rf-b',  rf);
+      fillCM('rf-fe', rf_fe);
+    });
+  </script>
+</body>
+</html>

@@ -238,6 +238,11 @@ def fe_stats():
     return render_template("fe_stats.html")
 
 
+@app.route("/compare")
+def compare():
+    return render_template("compare_stats.html")
+
+
 @app.route("/metrics")
 def metrics():
     mtype = request.args.get("model", "lr")
