@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Titanic Survival Predictor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #0d0d0d;
+      --paper: #f5f0e8;
+      --rust: #8b3a2a;
+      --gold: #c9a84c;
+      --navy: #1a2744;
+      --fog: #c8c0b0;
+      --cream: #ede8db;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      background-color: var(--navy);
+      color: var(--paper);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 0 1rem 4rem;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* Animated ocean background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 20% 80%, rgba(26,39,68,0.9) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%, rgba(10,20,45,0.8) 0%, transparent 60%),
+        linear-gradient(180deg, #0a1628 0%, #1a2744 40%, #0f1e38 100%);
+      z-index: -2;
+    }
+
+    /* Subtle wave lines */
+    body::after {
+      content: '';
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 200px;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 28px,
+        rgba(201,168,76,0.04) 28px,
+        rgba(201,168,76,0.04) 30px
+      );
+      z-index: -1;
+    }
+
+    /* ── Header ── */
+    header {
+      width: 100%;
+      max-width: 760px;
+      text-align: center;
+      padding: 3.5rem 1rem 2rem;
+      position: relative;
+    }
+
+    .ship-rule {
+      width: 80px;
+      height: 1px;
+      background: var(--gold);
+      margin: 0 auto 1.4rem;
+      opacity: 0;
+      animation: fadeIn 1s 0.2s forwards;
+    }
+
+    .tagline {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: var(--gold);
+      opacity: 0;
+      animation: fadeIn 1s 0.3s forwards;
+    }
+
+    h1 {
+      font-size: clamp(2.4rem, 6vw, 4rem);
+      font-weight: 300;
+      letter-spacing: 0.04em;
+      line-height: 1.15;
+      color: var(--paper);
+      margin: 0.6rem 0 0.4rem;
+      opacity: 0;
+      animation: slideUp 0.9s 0.4s cubic-bezier(0.22,1,0.36,1) forwards;
+    }
+
+    h1 em {
+      font-style: italic;
+      color: var(--gold);
+    }
+
+    .subtitle {
+      font-size: 1rem;
+      font-weight: 300;
+      color: var(--fog);
+      font-style: italic;
+      opacity: 0;
+      animation: fadeIn 1s 0.7s forwards;
+    }
+
+    /* ── Card ── */
+    .card {
+      width: 100%;
+      max-width: 700px;
+      background: rgba(245,240,232,0.05);
+      border: 1px solid rgba(201,168,76,0.25);
+      border-radius: 2px;
+      padding: 2.5rem 2.5rem 2rem;
+      backdrop-filter: blur(6px);
+      opacity: 0;
+      animation: slideUp 1s 0.8s cubic-bezier(0.22,1,0.36,1) forwards;
+      position: relative;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 8px; left: 8px; right: 8px; bottom: 8px;
+      border: 1px solid rgba(201,168,76,0.08);
+      border-radius: 1px;
+      pointer-events: none;
+    }
+
+    /* Corner ornaments */
+    .card::after {
+      content: '✦';
+      position: absolute;
+      top: -0.7rem;
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--gold);
+      font-size: 0.85rem;
+      background: var(--navy);
+      padding: 0 0.5rem;
+    }
+
+    /* ── Form grid ── */
+    .section-label {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .section-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: rgba(201,168,76,0.2);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.4rem 2rem;
+      margin-bottom: 2rem;
+    }
+
+    @media (max-width: 520px) {
+      .form-grid { grid-template-columns: 1fr; }
+      .card { padding: 1.8rem 1.3rem 1.5rem; }
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .field.full { grid-column: 1 / -1; }
+
+    label {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--fog);
+    }
+
+    select, input[type="number"] {
+      font-family: 'Cormorant Garamond', Georgia, serif;
+      font-size: 1.05rem;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(201,168,76,0.2);
+      border-radius: 1px;
+      color: var(--paper);
+      padding: 0.6rem 0.8rem;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.25s, background 0.25s;
+      -webkit-appearance: none;
+    }
+
+    select option {
+      background: var(--navy);
+      color: var(--paper);
+    }
+
+    select:focus, input[type="number"]:focus {
+      border-color: var(--gold);
+      background: rgba(201,168,76,0.06);
+    }
+
+    input[type="number"]::-webkit-inner-spin-button { opacity: 0.3; }
+
+    /* ── Radio group for Sex ── */
+    .radio-group {
+      display: flex;
+      gap: 0;
+    }
+
+    .radio-group label {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.6rem 1rem;
+      border: 1px solid rgba(201,168,76,0.2);
+      cursor: pointer;
+      font-size: 0.75rem;
+      letter-spacing: 0.15em;
+      transition: all 0.2s;
+      text-transform: uppercase;
+      font-family: 'Courier Prime', monospace;
+      color: var(--fog);
+    }
+
+    .radio-group label:first-child { border-right: none; }
+    .radio-group input[type="radio"] { display: none; }
+
+    .radio-group input[type="radio"]:checked + span {
+      color: var(--navy);
+    }
+
+    .radio-group label:has(input:checked) {
+      background: var(--gold);
+      border-color: var(--gold);
+      color: var(--navy);
+    }
+
+    /* ── Submit button ── */
+    .btn-predict {
+      width: 100%;
+      padding: 1rem;
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      background: transparent;
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      cursor: pointer;
+      border-radius: 1px;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-predict::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--gold);
+      transform: translateX(-100%);
+      transition: transform 0.3s cubic-bezier(0.22,1,0.36,1);
+      z-index: 0;
+    }
+
+    .btn-predict:hover::before { transform: translateX(0); }
+    .btn-predict:hover { color: var(--navy); }
+    .btn-predict span { position: relative; z-index: 1; }
+
+    /* ── Result panel ── */
+    #result {
+      width: 100%;
+      max-width: 700px;
+      margin-top: 1.5rem;
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.22,1,0.36,1);
+    }
+    #result.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .result-card {
+      border: 1px solid;
+      border-radius: 2px;
+      padding: 2rem 2.5rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .result-card.survived {
+      border-color: rgba(100,200,150,0.5);
+      background: rgba(40,90,60,0.2);
+    }
+    .result-card.perished {
+      border-color: rgba(180,60,40,0.5);
+      background: rgba(90,30,20,0.2);
+    }
+
+    .result-badge {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      margin-bottom: 0.5rem;
+    }
+    .survived .result-badge { color: #7ecfa0; }
+    .perished .result-badge { color: #e07060; }
+
+    .result-verdict {
+      font-size: clamp(1.8rem, 5vw, 2.8rem);
+      font-weight: 300;
+      letter-spacing: 0.03em;
+      line-height: 1.1;
+      margin-bottom: 1.2rem;
+    }
+    .survived .result-verdict { color: #a8e6c0; }
+    .perished .result-verdict { color: #e8a090; }
+
+    /* Probability bar */
+    .prob-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 0.4rem;
+    }
+    .prob-label {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--fog);
+      width: 60px;
+      flex-shrink: 0;
+    }
+    .prob-track {
+      flex: 1;
+      height: 4px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .prob-fill {
+      height: 100%;
+      border-radius: 2px;
+      width: 0%;
+      transition: width 1s cubic-bezier(0.22,1,0.36,1) 0.3s;
+    }
+    .survived .prob-fill.s { background: #7ecfa0; }
+    .survived .prob-fill.d { background: rgba(180,60,40,0.5); }
+    .perished .prob-fill.s { background: rgba(100,200,150,0.4); }
+    .perished .prob-fill.d { background: #e07060; }
+
+    .prob-pct {
+      font-family: 'Courier Prime', monospace;
+      font-size: 0.7rem;
+      width: 36px;
+      text-align: right;
+      color: var(--fog);
+    }
+
+    /* ── Decorative ship silhouette ── */
+    .ship-deco {
+      text-align: center;
+      padding: 2rem 0 1rem;
+      opacity: 0.15;
+      font-size: 2rem;
+      letter-spacing: 0.5rem;
+      opacity: 0;
+      animation: fadeIn 2s 1.2s forwards;
+    }
+
+    /* ── Animations ── */
+    @keyframes fadeIn {
+      to { opacity: 1; }
+    }
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Loading dots */
+    .loading-dots::after {
+      content: '...';
+      animation: dots 1.2s infinite;
+    }
+    @keyframes dots {
+      0%   { content: '.'; }
+      33%  { content: '..'; }
+      66%  { content: '...'; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="ship-rule"></div>
+    <p class="tagline">RMS Titanic · April 15, 1912</p>
+    <h1>Would You Have<br><em>Survived?</em></h1>
+    <p class="subtitle">The ship's logbook yields its secrets to machine learning</p>
+  </header>
+
+  <div class="card">
+    <p class="section-label">Passenger Details</p>
+
+    <div class="form-grid">
+
+      <div class="field">
+        <label for="pclass">Ticket Class</label>
+        <select id="pclass">
+          <option value="1">1st Class — First</option>
+          <option value="2" selected>2nd Class — Second</option>
+          <option value="3">3rd Class — Third</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Sex</label>
+        <div class="radio-group">
+          <label>
+            <input type="radio" name="sex" value="male" checked />
+            <span>Male</span>
+          </label>
+          <label>
+            <input type="radio" name="sex" value="female" />
+            <span>Female</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="age">Age</label>
+        <input type="number" id="age" min="0" max="100" value="30" step="1" />
+      </div>
+
+      <div class="field">
+        <label for="fare">Fare Paid (£)</label>
+        <input type="number" id="fare" min="0" max="600" value="32" step="0.5" />
+      </div>
+
+      <div class="field">
+        <label for="sibsp">Siblings / Spouse aboard</label>
+        <input type="number" id="sibsp" min="0" max="8" value="0" step="1" />
+      </div>
+
+      <div class="field">
+        <label for="parch">Parents / Children aboard</label>
+        <input type="number" id="parch" min="0" max="9" value="0" step="1" />
+      </div>
+
+      <div class="field full">
+        <label for="embarked">Port of Embarkation</label>
+        <select id="embarked">
+          <option value="S">Southampton, England</option>
+          <option value="C">Cherbourg, France</option>
+          <option value="Q">Queenstown, Ireland</option>
+        </select>
+      </div>
+
+    </div>
+
+    <button class="btn-predict" onclick="predict()">
+      <span id="btn-label">Consult the Oracle</span>
+    </button>
+  </div>
+
+  <div id="result"></div>
+
+  <div class="ship-deco">🚢 · · · · · · · · · · · ·</div>
+
+  <script>
+    async function predict() {
+      const btn = document.querySelector('.btn-predict');
+      const label = document.getElementById('btn-label');
+      const result = document.getElementById('result');
+
+      label.textContent = '';
+      label.classList.add('loading-dots');
+      btn.disabled = true;
+
+      const payload = {
+        pclass:   document.getElementById('pclass').value,
+        sex:      document.querySelector('input[name="sex"]:checked').value,
+        age:      document.getElementById('age').value,
+        fare:     document.getElementById('fare').value,
+        sibsp:    document.getElementById('sibsp').value,
+        parch:    document.getElementById('parch').value,
+        embarked: document.getElementById('embarked').value,
+      };
+
+      try {
+        const resp = await fetch('/predict', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+
+        if (data.error) throw new Error(data.error);
+
+        const survived = data.survived;
+        const sp = data.survived_probability;
+        const dp = data.died_probability;
+
+        result.innerHTML = `
+          <div class="result-card ${survived ? 'survived' : 'perished'}">
+            <p class="result-badge">${survived ? '✦ Prediction' : '✦ Prediction'}</p>
+            <p class="result-verdict">${survived
+              ? 'You would have<br>survived.'
+              : 'You would have<br>perished.'}</p>
+
+            <div class="prob-row">
+              <span class="prob-label">Survived</span>
+              <div class="prob-track"><div class="prob-fill s" id="bar-s"></div></div>
+              <span class="prob-pct">${sp}%</span>
+            </div>
+            <div class="prob-row">
+              <span class="prob-label">Perished</span>
+              <div class="prob-track"><div class="prob-fill d" id="bar-d"></div></div>
+              <span class="prob-pct">${dp}%</span>
+            </div>
+          </div>
+        `;
+
+        result.classList.remove('visible');
+        void result.offsetWidth; // reflow
+        result.classList.add('visible');
+
+        // Animate bars after render
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            document.getElementById('bar-s').style.width = sp + '%';
+            document.getElementById('bar-d').style.width = dp + '%';
+          });
+        });
+
+      } catch (err) {
+        result.innerHTML = `<div class="result-card perished"><p class="result-verdict" style="font-size:1.2rem">Error: ${err.message}</p></div>`;
+        result.classList.add('visible');
+      } finally {
+        label.classList.remove('loading-dots');
+        label.textContent = 'Consult the Oracle';
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
