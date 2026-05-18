@@ -17,6 +17,30 @@ docker run -p 5000:5000 titanic-predictor
 
 Then open **http://localhost:5000** in your browser.
 
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | Python 3, Flask |
+| ML | scikit-learn (LogisticRegression, RandomForestClassifier, VotingClassifier, GridSearchCV, Pipeline) |
+| Data | pandas, NumPy |
+| Frontend | HTML/CSS/JS, Chart.js v4 |
+| Fonts | Google Fonts (Cormorant Garamond, Courier Prime) |
+| Server | Gunicorn |
+| Containerisation | Docker, Docker Compose |
+
+## Features
+
+- **Survival predictor** — enter passenger details and get an instant survival probability from any of the 10 trained models
+- **10 model variants** — Logistic Regression and Random Forest, each available in base, feature-engineered, hyperparameter-tuned, and ensemble (VotingClassifier) forms
+- **Feature engineering** — title extraction from passenger name, family size, and age binning added as additional features
+- **Hyperparameter tuning** — GridSearchCV with 5-fold cross-validation automatically finds optimal parameters for each model
+- **Ensemble models** — soft-voting VotingClassifiers combine LR and RF predictions for base, FE, and tuned variants
+- **Interactive stats pages** — metrics bar charts, ROC curves, confusion matrices, and feature importance/coefficient charts for every model
+- **Model comparison pages** — side-by-side views for base vs FE, untuned vs tuned, and sub-models vs ensemble
+- **Model history** — save any trained model's stats to a persistent archive with a custom name
+- **Persistent models** — trained models are cached to disk and reloaded on restart, skipping retraining
+
 ## Results
 
 ### Ensemble models outperformed individual models
