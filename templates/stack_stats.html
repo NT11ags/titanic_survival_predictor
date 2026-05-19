@@ -3,15 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ensemble Models — Titanic Predictor</title>
+  <title>Stacking Ensemble — Titanic Predictor</title>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <style>
     :root {
       --ink: #0d0d0d; --paper: #f5f0e8;
       --gold: #c9a84c; --navy: #1a2744; --fog: #c8c0b0;
-      --steel: #6ab0c8; --ensemble: #9b72cf; --ensemble-base: #72cfaa;
-      --gold-fe: #c87a4c; --steel-fe: #4cb88c; --ensemble-fe: #cf729b;
+      --steel: #6ab0c8;
+      --gbm: #e08832; --svc: #d05878; --knn: #4eb89e;
+      --ensemble-base: #72cfaa; --ensemble-tuned: #9b72cf;
+      --ensemble-stack: #a040e0;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -86,15 +88,46 @@
     }
     .chart-title::after { content: ''; flex: 1; height: 1px; background: rgba(201,168,76,0.2); }
 
-    /* Info card */
     .info-card {
-      background: rgba(155,114,207,0.08);
-      border: 1px solid rgba(155,114,207,0.25);
+      background: rgba(160,64,224,0.08);
+      border: 1px solid rgba(160,64,224,0.25);
       border-radius: 2px; padding: 1.2rem 1.5rem;
       font-size: 0.95rem; font-weight: 300; color: var(--fog);
       font-style: italic; line-height: 1.6;
     }
     .info-card strong { color: var(--paper); font-style: normal; font-weight: 400; }
+
+    .arch-grid {
+      display: grid; grid-template-columns: repeat(5, 1fr); gap: 0.75rem;
+      margin: 1rem 0;
+    }
+    @media (max-width: 640px) { .arch-grid { grid-template-columns: repeat(3, 1fr); } }
+    .arch-box {
+      border-radius: 2px; padding: 0.8rem 0.5rem; text-align: center;
+      background: rgba(245,240,232,0.04); border: 1px solid rgba(245,240,232,0.1);
+    }
+    .arch-box .arch-label {
+      font-family: 'Courier Prime', monospace; font-size: 0.55rem;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      display: block; margin-top: 0.3rem; color: var(--fog);
+    }
+    .arch-box .arch-name {
+      font-size: 0.85rem; font-weight: 300; color: var(--paper);
+    }
+    .arch-arrow {
+      display: flex; align-items: center; justify-content: center;
+      color: var(--fog); font-size: 1.2rem; margin: 0.5rem 0;
+    }
+    .arch-meta {
+      border-radius: 2px; padding: 0.8rem; text-align: center;
+      background: rgba(160,64,224,0.12); border: 1px solid rgba(160,64,224,0.3);
+      font-size: 0.9rem; font-weight: 300;
+    }
+    .arch-meta .arch-label {
+      font-family: 'Courier Prime', monospace; font-size: 0.55rem;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--ensemble-stack); display: block; margin-top: 0.3rem;
+    }
 
     .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
     @media (max-width: 640px) { .two-col { grid-template-columns: 1fr; } }
@@ -109,7 +142,6 @@
     .cm-tp, .cm-tn { background: rgba(40,120,80,0.3); border: 1px solid rgba(100,200,150,0.25); }
     .cm-fp, .cm-fn { background: rgba(120,40,30,0.3); border: 1px solid rgba(200,80,60,0.25); }
 
-    /* Save bar */
     .save-bar {
       display: flex; gap: 0.6rem; align-items: center;
       margin-top: 1.2rem; flex-wrap: wrap;
@@ -138,7 +170,7 @@
     .save-msg.ok  { color: #7ecfa0; }
     .save-msg.err { color: #e07060; }
 
-    canvas { max-height: 260px; }
+    canvas { max-height: 280px; }
   </style>
 </head>
 <body>
@@ -147,38 +179,80 @@
     <nav style="display:flex;justify-content:center;gap:2rem;flex-wrap:wrap;">
       <a class="back-link" href="/">← Predictor</a>
       <a class="back-link" href="/stats">Base Models</a>
-      <a class="back-link" href="/fe-stats">FE Models</a>
       <a class="back-link" href="/tuned-stats">Tuned Models</a>
-      <a class="back-link" href="/tuning-stats">Tuning Comparison</a>
-      <a class="back-link" href="/stack-stats">Stacking Ensemble</a>
+      <a class="back-link" href="/ensemble-stats">Voting Ensembles</a>
       <a class="back-link" href="/previous-models">Previous Models</a>
     </nav>
-    <p class="tagline">RMS Titanic · VotingClassifier</p>
-    <h1><em>Ensemble</em> Models</h1>
-    <p class="subtitle">Soft-voting ensembles combining LR and RF predictions</p>
+    <p class="tagline">RMS Titanic · StackingClassifier</p>
+    <h1><em>Stacking</em> Ensemble</h1>
+    <p class="subtitle">Five diverse base learners combined via a meta-learner</p>
   </header>
 
-  <!-- ── Base Ensemble ── -->
+  <!-- ── Architecture ── -->
   <div class="model-section">
     <div class="model-section-header">
-      <h2>Base Ensemble</h2>
+      <h2>Architecture</h2>
       <div class="rule"></div>
     </div>
 
     <div class="section info-card">
-      <strong>VotingClassifier (soft)</strong> combining
-      <strong>Logistic Regression</strong> and <strong>Random Forest</strong> base models.
-      Averages predicted probabilities from both models before making a final decision.
-    </div>
-
-    <div class="legend">
-      <div class="legend-item"><div class="legend-dot" style="background:var(--gold)"></div> LR (Base)</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--steel)"></div> RF (Base)</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--ensemble-base)"></div> Ensemble (Base)</div>
+      Unlike soft-voting which simply averages probabilities, <strong>stacking</strong> trains a
+      <strong>meta-learner</strong> (Logistic Regression) on out-of-fold predictions from five diverse
+      base estimators. Each base model captures different decision boundaries — linear, tree-based,
+      kernel-based, and distance-based — so the meta-learner learns how to weight them optimally.
+      No feature engineering or hyperparameter tuning is applied.
     </div>
 
     <div class="section chart-card">
-      <div class="chart-title">Metrics — Sub-models vs Ensemble</div>
+      <div class="chart-title">Base Estimators</div>
+      <div class="arch-grid">
+        <div class="arch-box" style="border-color:rgba(201,168,76,0.3)">
+          <span class="arch-name" style="color:#c9a84c">LR</span>
+          <span class="arch-label">Logistic Regression</span>
+        </div>
+        <div class="arch-box" style="border-color:rgba(106,176,200,0.3)">
+          <span class="arch-name" style="color:#6ab0c8">RF</span>
+          <span class="arch-label">Random Forest</span>
+        </div>
+        <div class="arch-box" style="border-color:rgba(224,136,50,0.3)">
+          <span class="arch-name" style="color:#e08832">GBM</span>
+          <span class="arch-label">Gradient Boosting</span>
+        </div>
+        <div class="arch-box" style="border-color:rgba(208,88,120,0.3)">
+          <span class="arch-name" style="color:#d05878">SVC</span>
+          <span class="arch-label">Support Vector</span>
+        </div>
+        <div class="arch-box" style="border-color:rgba(78,184,158,0.3)">
+          <span class="arch-name" style="color:#4eb89e">KNN</span>
+          <span class="arch-label">K-Nearest Neighbours</span>
+        </div>
+      </div>
+      <div class="arch-arrow">↓ out-of-fold predict_proba (cv=5) ↓</div>
+      <div class="arch-meta">
+        <span style="color:var(--ensemble-stack);font-size:0.9rem;">Logistic Regression</span>
+        <span class="arch-label">Meta-learner</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Performance vs Base Models ── -->
+  <div class="model-section">
+    <div class="model-section-header">
+      <h2>vs. Individual Models</h2>
+      <div class="rule"></div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#c9a84c"></div> LR</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#6ab0c8"></div> RF</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e08832"></div> GBM</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#d05878"></div> SVC</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#4eb89e"></div> KNN</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--ensemble-stack)"></div> Stacking</div>
+    </div>
+
+    <div class="section chart-card">
+      <div class="chart-title">Metrics — Base Models + Stacking</div>
       <canvas id="base-metrics-chart"></canvas>
     </div>
 
@@ -186,138 +260,63 @@
       <div class="chart-title">ROC Curves</div>
       <canvas id="base-roc-chart"></canvas>
     </div>
-
-    <div class="section two-col">
-      <div class="chart-card">
-        <div class="chart-title" style="color:var(--ensemble-base)">Confusion Matrix — Ensemble (Base)</div>
-        <div class="cm-grid">
-          <div class="cm-cell cm-tp"><span class="cm-num" id="eb-tp">—</span><span class="cm-lbl">True Pos</span></div>
-          <div class="cm-cell cm-fp"><span class="cm-num" id="eb-fp">—</span><span class="cm-lbl">False Pos</span></div>
-          <div class="cm-cell cm-fn"><span class="cm-num" id="eb-fn">—</span><span class="cm-lbl">False Neg</span></div>
-          <div class="cm-cell cm-tn"><span class="cm-num" id="eb-tn">—</span><span class="cm-lbl">True Neg</span></div>
-        </div>
-        <div class="save-bar">
-          <input type="text" id="ensemble_base-save-name" />
-          <button class="btn-save" onclick="saveModel('ensemble_base')">Save</button>
-          <span class="save-msg" id="ensemble_base-save-msg"></span>
-        </div>
-      </div>
-      <div class="chart-card" style="display:flex;flex-direction:column;gap:1rem;">
-        <div class="chart-title">Accuracy at a Glance</div>
-        <canvas id="base-acc-chart" style="max-height:180px"></canvas>
-      </div>
-    </div>
   </div>
 
-  <!-- ── FE Ensemble ── -->
+  <!-- ── Performance vs Voting Ensembles ── -->
   <div class="model-section">
     <div class="model-section-header">
-      <h2>Feature Engineered Ensemble</h2>
+      <h2>vs. Voting Ensembles</h2>
       <div class="rule"></div>
     </div>
 
-    <div class="section info-card">
-      <strong>VotingClassifier (soft)</strong> combining
-      <strong>Logistic Regression (FE)</strong> and <strong>Random Forest (FE)</strong>.
-      Averages predicted probabilities from both models before making a final decision.
-    </div>
-
     <div class="legend">
-      <div class="legend-item"><div class="legend-dot" style="background:var(--gold)"></div> LR (FE)</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--steel)"></div> RF (FE)</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--ensemble-fe)"></div> Ensemble (FE)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--ensemble-base)"></div> Ensemble (Base)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--ensemble-tuned)"></div> Ensemble (Tuned)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--ensemble-stack)"></div> Stacking</div>
     </div>
 
     <div class="section chart-card">
-      <div class="chart-title">Metrics — Sub-models vs Ensemble</div>
-      <canvas id="fe-metrics-chart"></canvas>
+      <div class="chart-title">Metrics — Stacking vs Voting Ensembles</div>
+      <canvas id="ens-metrics-chart"></canvas>
     </div>
 
     <div class="section chart-card">
       <div class="chart-title">ROC Curves</div>
-      <canvas id="fe-roc-chart"></canvas>
+      <canvas id="ens-roc-chart"></canvas>
     </div>
 
     <div class="section two-col">
       <div class="chart-card">
-        <div class="chart-title" style="color:var(--ensemble-fe)">Confusion Matrix — Ensemble (FE)</div>
+        <div class="chart-title" style="color:var(--ensemble-stack)">Confusion Matrix — Stacking Ensemble</div>
         <div class="cm-grid">
-          <div class="cm-cell cm-tp"><span class="cm-num" id="efe-tp">—</span><span class="cm-lbl">True Pos</span></div>
-          <div class="cm-cell cm-fp"><span class="cm-num" id="efe-fp">—</span><span class="cm-lbl">False Pos</span></div>
-          <div class="cm-cell cm-fn"><span class="cm-num" id="efe-fn">—</span><span class="cm-lbl">False Neg</span></div>
-          <div class="cm-cell cm-tn"><span class="cm-num" id="efe-tn">—</span><span class="cm-lbl">True Neg</span></div>
+          <div class="cm-cell cm-tp"><span class="cm-num" id="es-tp">—</span><span class="cm-lbl">True Pos</span></div>
+          <div class="cm-cell cm-fp"><span class="cm-num" id="es-fp">—</span><span class="cm-lbl">False Pos</span></div>
+          <div class="cm-cell cm-fn"><span class="cm-num" id="es-fn">—</span><span class="cm-lbl">False Neg</span></div>
+          <div class="cm-cell cm-tn"><span class="cm-num" id="es-tn">—</span><span class="cm-lbl">True Neg</span></div>
         </div>
         <div class="save-bar">
-          <input type="text" id="ensemble_fe-save-name" />
-          <button class="btn-save" onclick="saveModel('ensemble_fe')">Save</button>
-          <span class="save-msg" id="ensemble_fe-save-msg"></span>
+          <input type="text" id="ensemble_stack-save-name" />
+          <button class="btn-save" onclick="saveModel('ensemble_stack')">Save</button>
+          <span class="save-msg" id="ensemble_stack-save-msg"></span>
         </div>
       </div>
       <div class="chart-card" style="display:flex;flex-direction:column;gap:1rem;">
         <div class="chart-title">Accuracy at a Glance</div>
-        <canvas id="fe-acc-chart" style="max-height:180px"></canvas>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Tuned Ensemble ── -->
-  <div class="model-section">
-    <div class="model-section-header">
-      <h2>Tuned Ensemble</h2>
-      <div class="rule"></div>
-    </div>
-
-    <div class="section info-card">
-      <strong>VotingClassifier (soft)</strong> combining
-      <strong>Logistic Regression (Tuned)</strong> and <strong>Random Forest (Tuned)</strong>.
-      Sub-models use the best hyperparameters found by GridSearchCV before being combined.
-    </div>
-
-    <div class="legend">
-      <div class="legend-item"><div class="legend-dot" style="background:var(--gold)"></div> LR (Tuned)</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--steel)"></div> RF (Tuned)</div>
-      <div class="legend-item"><div class="legend-dot" style="background:var(--ensemble)"></div> Ensemble (Tuned)</div>
-    </div>
-
-    <div class="section chart-card">
-      <div class="chart-title">Metrics — Sub-models vs Ensemble</div>
-      <canvas id="tuned-metrics-chart"></canvas>
-    </div>
-
-    <div class="section chart-card">
-      <div class="chart-title">ROC Curves</div>
-      <canvas id="tuned-roc-chart"></canvas>
-    </div>
-
-    <div class="section two-col">
-      <div class="chart-card">
-        <div class="chart-title" style="color:var(--ensemble)">Confusion Matrix — Ensemble (Tuned)</div>
-        <div class="cm-grid">
-          <div class="cm-cell cm-tp"><span class="cm-num" id="et-tp">—</span><span class="cm-lbl">True Pos</span></div>
-          <div class="cm-cell cm-fp"><span class="cm-num" id="et-fp">—</span><span class="cm-lbl">False Pos</span></div>
-          <div class="cm-cell cm-fn"><span class="cm-num" id="et-fn">—</span><span class="cm-lbl">False Neg</span></div>
-          <div class="cm-cell cm-tn"><span class="cm-num" id="et-tn">—</span><span class="cm-lbl">True Neg</span></div>
-        </div>
-        <div class="save-bar">
-          <input type="text" id="ensemble_tuned-save-name" />
-          <button class="btn-save" onclick="saveModel('ensemble_tuned')">Save</button>
-          <span class="save-msg" id="ensemble_tuned-save-msg"></span>
-        </div>
-      </div>
-      <div class="chart-card" style="display:flex;flex-direction:column;gap:1rem;">
-        <div class="chart-title">Accuracy at a Glance</div>
-        <canvas id="tuned-acc-chart" style="max-height:180px"></canvas>
+        <canvas id="acc-chart" style="max-height:180px"></canvas>
       </div>
     </div>
   </div>
 
   <script>
-    const GOLD          = '#c9a84c';
-    const STEEL         = '#6ab0c8';
-    const ENSEMBLE_BASE = '#72cfaa';
-    const ENSEMBLE      = '#9b72cf';
-    const ENSEMBLE_FE   = '#cf729b';
-    const FOG           = '#c8c0b0';
+    const GOLD           = '#c9a84c';
+    const STEEL          = '#6ab0c8';
+    const GBM            = '#e08832';
+    const SVC_C          = '#d05878';
+    const KNN            = '#4eb89e';
+    const ENSEMBLE_BASE  = '#72cfaa';
+    const ENSEMBLE_TUNED = '#9b72cf';
+    const ENSEMBLE_STACK = '#a040e0';
+    const FOG            = '#c8c0b0';
 
     Chart.defaults.color = FOG;
     Chart.defaults.borderColor = 'rgba(201,168,76,0.1)';
@@ -330,18 +329,18 @@
       document.getElementById(prefix + '-tn').textContent = tn;
     }
 
-    function metricsChart(canvasId, a, b, ens, cA, cB, cEns, lA, lB, lEns) {
-      const vals = m => [m.accuracy, m.precision, m.recall, m.f1, m.roc_auc]
-                         .map(v => +(v * 100).toFixed(1));
+    function metricsChart(canvasId, datasets) {
       new Chart(document.getElementById(canvasId), {
         type: 'bar',
         data: {
           labels: ['Accuracy', 'Precision', 'Recall', 'F1 Score', 'AUC'],
-          datasets: [
-            { label: lA,   data: vals(a),   backgroundColor: cA   + '80', borderColor: cA,   borderWidth: 1 },
-            { label: lB,   data: vals(b),   backgroundColor: cB   + '80', borderColor: cB,   borderWidth: 1 },
-            { label: lEns, data: vals(ens), backgroundColor: cEns + '80', borderColor: cEns, borderWidth: 1 },
-          ],
+          datasets: datasets.map(({ m, color, label, bold }) => ({
+            label,
+            data: [m.accuracy, m.precision, m.recall, m.f1, m.roc_auc].map(v => +(v * 100).toFixed(1)),
+            backgroundColor: color + (bold ? 'cc' : '55'),
+            borderColor: color,
+            borderWidth: bold ? 2 : 1,
+          })),
         },
         options: {
           scales: {
@@ -359,14 +358,19 @@
       });
     }
 
-    function rocChart(canvasId, a, b, ens, cA, cB, cEns, lA, lB, lEns) {
+    function rocChart(canvasId, datasets) {
       new Chart(document.getElementById(canvasId), {
         type: 'line',
         data: {
           datasets: [
-            { label: `${lA} (AUC ${a.roc_auc})`,   data: a.fpr.map((x,i) => ({x, y: a.tpr[i]})),   borderColor: cA,   borderWidth: 2, pointRadius: 0, fill: false },
-            { label: `${lB} (AUC ${b.roc_auc})`,   data: b.fpr.map((x,i) => ({x, y: b.tpr[i]})),   borderColor: cB,   borderWidth: 2, pointRadius: 0, fill: false },
-            { label: `${lEns} (AUC ${ens.roc_auc})`, data: ens.fpr.map((x,i) => ({x, y: ens.tpr[i]})), borderColor: cEns, borderWidth: 2.5, pointRadius: 0, fill: false },
+            ...datasets.map(({ m, color, label, bold }) => ({
+              label: `${label} (AUC ${m.roc_auc})`,
+              data: m.fpr.map((x, i) => ({ x, y: m.tpr[i] })),
+              borderColor: color,
+              borderWidth: bold ? 2.5 : 1.8,
+              pointRadius: 0,
+              fill: false,
+            })),
             { label: 'Random baseline', data: [{x:0,y:0},{x:1,y:1}], borderColor: 'rgba(255,255,255,0.15)', borderWidth: 1, borderDash: [4,4], pointRadius: 0, fill: false },
           ],
         },
@@ -381,15 +385,15 @@
       });
     }
 
-    function accChart(canvasId, a, b, ens, cA, cB, cEns, lA, lB, lEns) {
+    function accChart(canvasId, datasets) {
       new Chart(document.getElementById(canvasId), {
         type: 'bar',
         data: {
-          labels: [lA, lB, lEns],
+          labels: datasets.map(d => d.label),
           datasets: [{
-            data: [+(a.accuracy * 100).toFixed(1), +(b.accuracy * 100).toFixed(1), +(ens.accuracy * 100).toFixed(1)],
-            backgroundColor: [cA + '80', cB + '80', cEns + '80'],
-            borderColor: [cA, cB, cEns],
+            data: datasets.map(d => +(d.m.accuracy * 100).toFixed(1)),
+            backgroundColor: datasets.map(d => d.color + '80'),
+            borderColor: datasets.map(d => d.color),
             borderWidth: 1,
           }],
         },
@@ -409,38 +413,53 @@
     Promise.all([
       fetch('/metrics?model=lr').then(r => r.json()),
       fetch('/metrics?model=rf').then(r => r.json()),
-      fetch('/metrics?model=ensemble_base').then(r => r.json()),
-      fetch('/metrics?model=lr_fe').then(r => r.json()),
-      fetch('/metrics?model=rf_fe').then(r => r.json()),
-      fetch('/metrics?model=ensemble_fe').then(r => r.json()),
       fetch('/metrics?model=lr_tuned').then(r => r.json()),
       fetch('/metrics?model=rf_tuned').then(r => r.json()),
+      fetch('/metrics?model=ensemble_base').then(r => r.json()),
       fetch('/metrics?model=ensemble_tuned').then(r => r.json()),
-    ]).then(([lr, rf, eb, lr_fe, rf_fe, efe, lr_t, rf_t, et]) => {
+      fetch('/metrics?model=ensemble_stack').then(r => r.json()),
+    ]).then(([lr, rf, lr_t, rf_t, eb, et, es]) => {
 
-      // Base ensemble
-      metricsChart('base-metrics-chart', lr, rf, eb, GOLD, STEEL, ENSEMBLE_BASE, 'LR (Base)', 'RF (Base)', 'Ensemble (Base)');
-      rocChart('base-roc-chart', lr, rf, eb, GOLD, STEEL, ENSEMBLE_BASE, 'LR (Base)', 'RF (Base)', 'Ensemble (Base)');
-      accChart('base-acc-chart', lr, rf, eb, GOLD, STEEL, ENSEMBLE_BASE, 'LR (Base)', 'RF (Base)', 'Ensemble (Base)');
-      fillCM('eb', eb);
-      document.getElementById('ensemble_base-save-name').value =
-        eb.model_name + ' — ' + (eb.trained_at || '');
+      // vs individual models (LR, RF, GBM, SVC, KNN from sub-models in stacking + stacking itself)
+      // We show LR, RF (as reference) and the stacking ensemble
+      metricsChart('base-metrics-chart', [
+        { m: lr,  color: GOLD,           label: 'LR' },
+        { m: rf,  color: STEEL,          label: 'RF' },
+        { m: lr_t, color: GOLD + 'bb',   label: 'LR (Tuned)' },
+        { m: rf_t, color: STEEL + 'bb',  label: 'RF (Tuned)' },
+        { m: es,  color: ENSEMBLE_STACK, label: 'Stacking', bold: true },
+      ]);
+      rocChart('base-roc-chart', [
+        { m: lr,  color: GOLD,           label: 'LR' },
+        { m: rf,  color: STEEL,          label: 'RF' },
+        { m: lr_t, color: GOLD + 'bb',   label: 'LR (Tuned)' },
+        { m: rf_t, color: STEEL + 'bb',  label: 'RF (Tuned)' },
+        { m: es,  color: ENSEMBLE_STACK, label: 'Stacking', bold: true },
+      ]);
 
-      // FE ensemble
-      metricsChart('fe-metrics-chart', lr_fe, rf_fe, efe, GOLD, STEEL, ENSEMBLE_FE, 'LR (FE)', 'RF (FE)', 'Ensemble (FE)');
-      rocChart('fe-roc-chart', lr_fe, rf_fe, efe, GOLD, STEEL, ENSEMBLE_FE, 'LR (FE)', 'RF (FE)', 'Ensemble (FE)');
-      accChart('fe-acc-chart', lr_fe, rf_fe, efe, GOLD, STEEL, ENSEMBLE_FE, 'LR (FE)', 'RF (FE)', 'Ensemble (FE)');
-      fillCM('efe', efe);
-      document.getElementById('ensemble_fe-save-name').value =
-        efe.model_name + ' — ' + (efe.trained_at || '');
+      // vs voting ensembles
+      metricsChart('ens-metrics-chart', [
+        { m: eb, color: ENSEMBLE_BASE,  label: 'Ensemble (Base)' },
+        { m: et, color: ENSEMBLE_TUNED, label: 'Ensemble (Tuned)' },
+        { m: es, color: ENSEMBLE_STACK, label: 'Stacking', bold: true },
+      ]);
+      rocChart('ens-roc-chart', [
+        { m: eb, color: ENSEMBLE_BASE,  label: 'Ensemble (Base)' },
+        { m: et, color: ENSEMBLE_TUNED, label: 'Ensemble (Tuned)' },
+        { m: es, color: ENSEMBLE_STACK, label: 'Stacking', bold: true },
+      ]);
 
-      // Tuned ensemble
-      metricsChart('tuned-metrics-chart', lr_t, rf_t, et, GOLD, STEEL, ENSEMBLE, 'LR (Tuned)', 'RF (Tuned)', 'Ensemble (Tuned)');
-      rocChart('tuned-roc-chart', lr_t, rf_t, et, GOLD, STEEL, ENSEMBLE, 'LR (Tuned)', 'RF (Tuned)', 'Ensemble (Tuned)');
-      accChart('tuned-acc-chart', lr_t, rf_t, et, GOLD, STEEL, ENSEMBLE, 'LR (Tuned)', 'RF (Tuned)', 'Ensemble (Tuned)');
-      fillCM('et', et);
-      document.getElementById('ensemble_tuned-save-name').value =
-        et.model_name + ' — ' + (et.trained_at || '');
+      // Accuracy bar
+      accChart('acc-chart', [
+        { m: eb, color: ENSEMBLE_BASE,  label: 'Ensemble (Base)' },
+        { m: et, color: ENSEMBLE_TUNED, label: 'Ensemble (Tuned)' },
+        { m: es, color: ENSEMBLE_STACK, label: 'Stacking' },
+      ]);
+
+      // Confusion matrix
+      fillCM('es', es);
+      document.getElementById('ensemble_stack-save-name').value =
+        es.model_name + ' — ' + (es.trained_at || '');
     });
 
     async function saveModel(mtype) {

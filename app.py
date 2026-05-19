@@ -5,13 +5,16 @@ import pickle
 import numpy as np
 import pandas as pd
 from flask import Flask, jsonify, render_template, request
-from sklearn.ensemble import RandomForestClassifier, VotingClassifier
+from sklearn.ensemble import (GradientBoostingClassifier, RandomForestClassifier,
+                              StackingClassifier, VotingClassifier)
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (auc, confusion_matrix, f1_score,
                              precision_score, recall_score, roc_curve)
 from sklearn.model_selection import GridSearchCV, train_test_split
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
 
 app = Flask(__name__)
 
@@ -27,6 +30,7 @@ MODEL_PATHS = {
     "ensemble_base":  "model_ensemble_base.pkl",
     "ensemble_fe":    "model_ensemble_fe.pkl",
     "ensemble_tuned": "model_ensemble_tuned.pkl",
+    "ensemble_stack": "model_ensemble_stack.pkl",
 }
 METRICS_PATHS = {k: v.replace("model_", "metrics_").replace(".pkl", ".json")
                  for k, v in MODEL_PATHS.items()}
@@ -162,9 +166,12 @@ def _compute_metrics(pipeline, X_test, y_test, features, model_type):
     is_ensemble = "ensemble" in model_type
 
     if is_ensemble:
-        fe_suffix    = " (FE)"    if is_fe    else ""
-        tuned_suffix = " Tuned"   if is_tuned else ""
-        model_name   = "Ensemble LR + RF" + fe_suffix + tuned_suffix
+        if "stack" in model_type:
+            model_name = "Stacking Ensemble"
+        else:
+            fe_suffix    = " (FE)"    if is_fe    else ""
+            tuned_suffix = " Tuned"   if is_tuned else ""
+            model_name   = "Ensemble LR + RF" + fe_suffix + tuned_suffix
         feature_values      = []
         feature_chart_label = ""
     else:
@@ -257,15 +264,43 @@ def train_ensemble(model_type, X_train, X_test, y_train, y_test, features, metri
     return vc, metrics
 
 
+def _build_stacking_pipeline():
+    estimators = [
+        ("lr",  Pipeline([("scaler", StandardScaler()), ("model", LogisticRegression(max_iter=1000, random_state=42))])),
+        ("rf",  Pipeline([("model", RandomForestClassifier(n_estimators=100, random_state=42))])),
+        ("gbm", Pipeline([("model", GradientBoostingClassifier(n_estimators=100, random_state=42))])),
+        ("svc", Pipeline([("scaler", StandardScaler()), ("model", SVC(probability=True, random_state=42))])),
+        ("knn", Pipeline([("scaler", StandardScaler()), ("model", KNeighborsClassifier(n_neighbors=5))])),
+    ]
+    return StackingClassifier(
+        estimators=estimators,
+        final_estimator=LogisticRegression(max_iter=1000, random_state=42),
+        cv=5,
+    )
+
+
+def train_stacking(X_train, X_test, y_train, y_test, features):
+    clf = _build_stacking_pipeline()
+    clf.fit(X_train, y_train)
+    print(f"[ENSEMBLE_STACK] Test accuracy: {clf.score(X_test, y_test):.2%}")
+    with open(MODEL_PATHS["ensemble_stack"], "wb") as f:
+        pickle.dump(clf, f)
+    metrics = _compute_metrics(clf, X_test, y_test, features, "ensemble_stack")
+    metrics["best_params"] = {}
+    with open(METRICS_PATHS["ensemble_stack"], "w") as f:
+        json.dump(metrics, f)
+    return clf, metrics
+
+
 # ── Startup: load or train all ten models ─────────────────────────────────────
 BASE_TYPES = ("lr", "rf", "lr_tuned", "rf_tuned")
 FE_TYPES       = ("lr_fe", "rf_fe", "lr_fe_tuned", "rf_fe_tuned")
-ENSEMBLE_TYPES = ("ensemble_base", "ensemble_fe", "ensemble_tuned")
+ENSEMBLE_TYPES = ("ensemble_base", "ensemble_fe", "ensemble_tuned", "ensemble_stack")
 
 def _missing(t):
     return not (os.path.exists(MODEL_PATHS[t]) and os.path.exists(METRICS_PATHS[t]))
 
-need_base = any(_missing(t) for t in BASE_TYPES + ("ensemble_base", "ensemble_tuned"))
+need_base = any(_missing(t) for t in BASE_TYPES + ("ensemble_base", "ensemble_tuned", "ensemble_stack"))
 need_fe   = any(_missing(t) for t in FE_TYPES   + ("ensemble_fe",))
 
 if need_base:
@@ -305,7 +340,11 @@ for mtype in ENSEMBLE_TYPES:
         with open(METRICS_PATHS[mtype], "r") as f:
             all_metrics[mtype] = json.load(f)
     else:
-        if "fe" in mtype:
+        if "stack" in mtype:
+            models[mtype], all_metrics[mtype] = train_stacking(
+                _X_tr, _X_te, _y_tr, _y_te, _feats
+            )
+        elif "fe" in mtype:
             models[mtype], all_metrics[mtype] = train_ensemble(
                 mtype, _X_tr_fe, _X_te_fe, _y_tr_fe, _y_te_fe, _feats_fe, all_metrics
             )
@@ -343,6 +382,10 @@ def tuned_stats():
 @app.route("/ensemble-stats")
 def ensemble_stats():
     return render_template("ensemble_stats.html")
+
+@app.route("/stack-stats")
+def stack_stats():
+    return render_template("stack_stats.html")
 
 @app.route("/metrics")
 def metrics():
